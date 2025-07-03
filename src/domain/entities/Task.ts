@@ -128,7 +128,10 @@ export class Task extends TypedEvent<{
     }
 
     updateTask(taskData: Partial<Task> = {}) {
+        const emitter = this.emitter;
         Object.assign(this, taskData);
+        // recover emitter
+        this.emitter = emitter;
         this.emit("updateTask", this);
     }
 

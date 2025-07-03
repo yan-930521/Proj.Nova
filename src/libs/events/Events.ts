@@ -8,7 +8,7 @@ export interface Disposable {
 }
 
 export class TypedEvent<TEvents extends Record<string, any>>  {
-    private emitter: EventEmitter = new EventEmitter();
+    protected emitter: EventEmitter = new EventEmitter();
 
     on<TEventName extends keyof TEvents & string>(
         eventName: TEventName,
