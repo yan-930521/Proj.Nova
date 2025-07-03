@@ -1,0 +1,17 @@
+.venv/
+backup/
+config/
+data/
+database/
+information/
+model/
+node_modules/
+vars/
+test/
+llama.log
+*.bat
+temp/
+src-old/
+dist/
+.*/
+package-lock.json
