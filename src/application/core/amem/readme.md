@@ -1,6 +1,6 @@
 參考 https://github.com/langchain-ai/langgraph-memory/
 
-新版 參考 https://github.com/agiresearch/A-mem/
+參考 https://github.com/agiresearch/A-mem/
 MemorySystem
 │
 ├─ UserProfile (Profile)

@@ -4,18 +4,13 @@ import { RunnableConfig } from '@langchain/core/runnables';
 import {
     Annotation, END, MemorySaver, Send, START, StateDefinition, StateGraph, task, UpdateType
 } from '@langchain/langgraph';
-import { ToolNode } from '@langchain/langgraph/prebuilt';
 
 import { ComponentContainer } from '../../ComponentContainer';
 import { Task, TaskType } from '../../domain/entities/Task';
-import { User } from '../../domain/entities/User';
 import { LevelDBTaskRepository } from '../../frameworks/levelDB/LevelDBTaskRepository';
 import { BaseSuperVisor, BaseSuperVisorCallOptions } from '../../libs/base/BaseSupervisor';
-import { LLMManager } from '../../services/LLMManager';
-import { MemoryNote } from './amem/Memory';
 import { MemoryManager } from './amem/MemoryManager';
 import { Character } from './character/Character';
-import { MEMORABLE_EVENT_PROMPT } from './prompts/amem';
 import { SemanticEngine } from './SemanticEngine';
 import { TaskOrchestrator } from './TaskOrchestrator';
 

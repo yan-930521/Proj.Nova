@@ -263,6 +263,7 @@ export class TaskOrchestrator extends BaseSuperVisor {
             state.task.emit("response", {
                 taskResponse: {
                     sender: 'Final Report',
+                    instruction: "",
                     message: state.final_report
                 }
             })
@@ -295,7 +296,7 @@ export class TaskOrchestrator extends BaseSuperVisor {
 
         let next_agent = state.task_plan.shift(); // get the first plan step
         if(!next_agent) return "updateFactAndPlan";
-
+    
         // find the agent with plan
         for (let name in this.members) {
             if (name.toLowerCase() == next_agent[0].toLowerCase()) {
@@ -364,10 +365,12 @@ export class TaskOrchestrator extends BaseSuperVisor {
                     const [stepName, stepState] = Object.entries(step)[0];
 
                     if(Object.keys(this.members).includes(stepName) && (stepState as typeof TaskOrchestratorState.State).messages) {
+                        let instruction = (stepState as typeof TaskOrchestratorState.State).messages.shift()?.content ?? "";
                         let msg = (stepState as typeof TaskOrchestratorState.State).messages.map((m) => m.content).join("\n");
                         task.emit("response", {
                             taskResponse: {
                                 sender: stepName,
+                                instruction: instruction as string,
                                 message: msg
                             }
                         })

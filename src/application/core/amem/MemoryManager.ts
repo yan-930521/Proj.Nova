@@ -72,7 +72,7 @@ export class MemoryManager extends BaseSuperVisor {
                 result.forEach((noteData) => {
                     let n = MemoryNote.fromJson(noteData.metadata);
                     this.memories[n.id] = n;
-                    console.log(n)
+                    // console.log(n)
                     this.memories[n.id].dbId = noteData.id;
                     this.memories[n.id].vector = noteData.vector;
                 });

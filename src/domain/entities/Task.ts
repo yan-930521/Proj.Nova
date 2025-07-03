@@ -70,7 +70,8 @@ export interface RecordItem {
 
 export type TaskResponse = {
     sender: string;
-    message: string
+    instruction: string;
+    message: string;
 }
 
 export class Task extends TypedEvent<{

@@ -11,6 +11,7 @@ import { MemoryManager } from './application/core/amem/MemoryManager';
 import { LATS } from './application/core/lats/LATS';
 import { TaskOrchestrator } from './application/core/TaskOrchestrator';
 import { ComponentContainer } from './ComponentContainer';
+import { Character } from './domain/entities/Character';
 import { Task, TaskType } from './domain/entities/Task';
 import { User } from './domain/entities/User';
 import { LevelDB } from './frameworks/levelDB/LevelDB';
@@ -100,6 +101,7 @@ ComponentContainer.initialize([
                     userInput: ct
                 });
                 task.on("response", ({ taskResponse , characterResponse }) => {
+                    const costTime = Date.now() - new Date(Number(task.timestamp)).getTime();
                     if (taskResponse) {
                         let channel = getChannel(client, msg.channelId);
                         if (channel) channel.sendTyping();
@@ -109,13 +111,14 @@ ComponentContainer.initialize([
                             description: `${taskResponse.message}`,
                             color: 14194326,
                             footer: {
-                                text: `cost: ${(Date.now() - new Date(task.timestamp).getTime()) / 1000} s`
+                                text: `cost: ${costTime / 1000} s`
                             },
                             timestamp: new Date()
                         });
 
                         msg.reply({
                             embeds: [embed],
+                            content: taskResponse.instruction,
                             allowedMentions: {
                                 repliedUser: false
                             }
@@ -129,7 +132,7 @@ ComponentContainer.initialize([
                             description: `${characterResponse.response}\n\n\`${characterResponse.reasoning}\``,
                             color: 14194326,
                             footer: {
-                                text: `cost: ${(Date.now() - new Date(task.timestamp).getTime()) / 1000} s`
+                                text: `cost: ${costTime / 1000} s`
                             },
                             timestamp: new Date()
                         });

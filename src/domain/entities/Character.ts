@@ -54,7 +54,7 @@ export class Character implements ICharacter {
     rules: string[] = [];
     history: IChatHistory[] = [];
 
-    static instance: Character;
+    static instance: ICharacter;
 
     constructor(character: ICharacter) {
         Object.assign(this, character);
@@ -62,7 +62,7 @@ export class Character implements ICharacter {
 
     static async getDefaultCharacter() {
         if(!Character.instance) {
-            Character.instance = await Character.loadFromFile()
+            Character.instance = await Character.loadFromFile();
         }
         return Character.instance;
     }

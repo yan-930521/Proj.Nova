@@ -73,7 +73,6 @@ export class WebSurfer<State extends StateType<any>> extends BaseAgent<State> {
                 ]
             }, config);
             const lastMessage = result.messages[result.messages.length - 1];
-            console.log(lastMessage.content)
             return {
                 messages: [
                     new HumanMessage(state.instruction),
