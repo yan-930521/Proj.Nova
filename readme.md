@@ -74,5 +74,5 @@
 
 ## 聯絡方式
 
-若有任何問題或建議，歡迎透過 [GitHub Issues](https://github.com/yan-930521/Proj.Nova/issues) 與我們聯繫！
+若有任何問題或建議，歡迎透過 [GitHub Issues](https://github.com/yan-930521/Proj.Nova/issues) 與我聯繫！
 
