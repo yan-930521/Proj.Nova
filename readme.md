@@ -15,7 +15,7 @@
 ---
 ## Demo Vedios
 <video width="640" height="360" controls>
-  <source src="assets/Github-Test_2025-07-03 15-32-36.mp4" type="video/mp4">
+  <source src="https://github.com/yan-930521/Proj.Nova/raw/refs/heads/main/asset/Github-Test_2025-07-03%2015-32-36.mp4" type="video/mp4">
   您的瀏覽器不支援影片播放。
 </video>
 
