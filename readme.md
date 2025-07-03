@@ -13,8 +13,9 @@
 * 動態記憶機制：Agentic Memory for LLM Agents ([arXiv:2502.12110](https://arxiv.org/abs/2502.12110))
 
 ---
-## Demo Vedios
-<video width="640" height="360" controls src="https://github.com/yan-930521/Proj.Nova/raw/refs/heads/main/asset/Github-Test_2025-07-03%2015-32-36.mp4" type="video/mp4"></video>
+
+## Demo Videos
+[![Demo Video](https://img.youtube.com/vi/uVKFufVW7Go/maxresdefault.jpg)](https://www.youtube.com/watch?v=uVKFufVW7Go)
 
 ---
 
