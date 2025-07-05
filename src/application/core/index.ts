@@ -132,7 +132,7 @@ export class CoreAgent extends BaseSuperVisor {
             if (task.type == TaskType.CasualChat) {
                 const serialized = state.messages.map((m => m.content));
 
-                const memoryContent  = await _MemoryManager_.searchMemory(task.author.id, serialized.join("\n"), 2, 2);
+                const memoryContent = await _MemoryManager_.searchMemory(task.author.id, serialized.join("\n"), 2, 2);
 
                 return new Send(_Character_.name, {
                     ...state,
@@ -170,25 +170,36 @@ export class CoreAgent extends BaseSuperVisor {
         //     });
         // } else {
         // this.logger.debug("create thread for user: " + user.id);
-        const stream = await this.graph.stream(
-            {
-                messages: [
-                    new HumanMessage(task.userInput)
-                ],
-                task
-            } as Partial<typeof BaseState.State>,
-            threadConfig
-        );
 
-        let lastStep;
-        for await (const step of stream) {
-            lastStep = step;
-            // const [stepName, stepState] = Object.entries(step)[0];
-            // console.log(stepName, stepState);
-            // // @ts-ignore
-            // console.log("rolled out: ", stepState?.root?.height);
-            this.logger.debug("---", step);
+        try {
+            const stream = await this.graph.stream(
+                {
+                    messages: [
+                        new HumanMessage(task.userInput)
+                    ],
+                    task
+                } as Partial<typeof BaseState.State>,
+                {
+                    ...threadConfig,
+                    signal: task.forceExit.signal
+                }
+            );
+
+            let lastStep;
+            for await (const step of stream) {
+                lastStep = step;
+                // const [stepName, stepState] = Object.entries(step)[0];
+                // console.log(stepName, stepState);
+                // // @ts-ignore
+                // console.log("rolled out: ", stepState?.root?.height);
+                this.logger.debug("---", step);
+            }
+        } catch (err) {
+            console.error(err);
+            const _TaskOrchestrator_ = this.members["TaskOrchestrator"] as TaskOrchestrator;
+            _TaskOrchestrator_.runingTasks[task.id] = false;
         }
+
         // }
         // }
     }

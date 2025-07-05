@@ -1,4 +1,5 @@
 import { CharacterResponse } from '../../application/core/character/Character';
+import { ComponentContainer } from '../../ComponentContainer';
 import { TypedEvent } from '../../libs/events/Events';
 import { getUid } from '../../libs/utils/string';
 import { User } from './User';
@@ -99,6 +100,8 @@ export class Task extends TypedEvent<{
     public planList: string[] = []; // 任務規劃流程
     public updateHistory: RecordItem[] = []; // 更新歷史紀錄
 
+    public forceExit = new AbortController();
+
     constructor(
         taskData: { author: User } & Partial<Task>
     ) {
@@ -129,9 +132,11 @@ export class Task extends TypedEvent<{
 
     updateTask(taskData: Partial<Task> = {}) {
         const emitter = this.emitter;
+        const forceExit = this.forceExit;
         Object.assign(this, taskData);
         // recover emitter
         this.emitter = emitter;
+        this.forceExit = forceExit;
         this.emit("updateTask", this);
     }
 

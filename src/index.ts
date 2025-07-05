@@ -1,5 +1,6 @@
 import {
-    Client, EmbedBuilder, GatewayIntentBits, Message, TextChannel, VoiceChannel
+    Client, EmbedBuilder, Events, GatewayIntentBits, Message, SlashCommandBuilder, TextChannel,
+    VoiceChannel
 } from 'discord.js';
 import { createInterface } from 'readline';
 
@@ -15,10 +16,18 @@ import { Character } from './domain/entities/Character';
 import { Task, TaskType } from './domain/entities/Task';
 import { User } from './domain/entities/User';
 import { LevelDB } from './frameworks/levelDB/LevelDB';
+import { LevelDBTaskRepository } from './frameworks/levelDB/LevelDBTaskRepository';
 import { LevelDBUserRepository } from './frameworks/levelDB/LevelDBUserRepository';
 import { checkVectra, Vectra } from './frameworks/vectra/vectra';
 import { Config } from './services/Config';
 import { LLMManager } from './services/LLMManager';
+
+process.on("unhandledRejection", (reason) => {
+    console.error(reason)
+});
+process.on("uncaughtException", (reason) => {
+    console.error(reason)
+});
 
 const client = new Client({
     intents: [
@@ -60,12 +69,20 @@ ComponentContainer.initialize([
 
     client.login(ComponentContainer.getConfig().DISCORD_TOKEN);
 
-        client.on("messageCreate", async msg => {
+    const testcmd = new SlashCommandBuilder()
+        .setName('ping')
+        .setDescription('Replies with Pong!');
+
+    client.on(Events.InteractionCreate, interaction => {
+        if (!interaction.isChatInputCommand()) return;
+        interaction.reply('Pong!');
+    });
+
+    client.on(Events.MessageCreate, async msg => {
         // if(msg.guildId != "855817825822179329") return;
-        if (msg.channel.id != "1105093381085995058" && msg.channel.id != "1184462386183290950" && msg.channel.id != "1271493582074810398") return;
         if (msg.author.id == "1105165234911580241") return;
 
-        if (msg.channelId == "1271493582074810398") {
+        if (msg.channelId != "1105093381085995058") {
             if (!msg.mentions.users.find((user) => user.id == "1105165234911580241")) {
                 return;
             }
@@ -93,6 +110,16 @@ ComponentContainer.initialize([
 
         let ct = cleanMsg(content); //.split(" ").join("，");
 
+        if (ct == "force stop") {
+            let list = await LevelDBTaskRepository.getInstance().findByMetadata({
+                author: user,
+            });
+            list.map((t) => {
+                t.forceExit.abort();
+            });
+            return;
+        }
+
         if (ct != "") {
             try {
                 // 創建任務
@@ -100,24 +127,27 @@ ComponentContainer.initialize([
                     author: user,
                     userInput: ct
                 });
-                task.on("response", ({ taskResponse , characterResponse }) => {
+
+                setTimeout(() => task.forceExit.abort(), 60000 * 6);
+
+                task.on("response", ({ taskResponse, characterResponse }) => {
                     const costTime = Date.now() - new Date(Number(task.timestamp)).getTime();
                     if (taskResponse) {
                         let channel = getChannel(client, msg.channelId);
                         if (channel) channel.sendTyping();
 
-                        const embed = new EmbedBuilder({
-                            title: taskResponse.sender,
-                            description: `${taskResponse.message}`,
-                            color: 14194326,
-                            footer: {
-                                text: `cost: ${costTime / 1000} s`
-                            },
-                            timestamp: new Date()
-                        });
+                        // const embed = new EmbedBuilder({
+                        //     title: taskResponse.sender,
+                        //     description: `${taskResponse.message}`,
+                        //     color: 14194326,
+                        //     footer: {
+                        //         text: `cost: ${costTime / 1000} s`
+                        //     },
+                        //     timestamp: new Date()
+                        // });
 
                         msg.reply({
-                            embeds: [embed],
+                            // embeds: [embed],
                             content: taskResponse.instruction,
                             allowedMentions: {
                                 repliedUser: false

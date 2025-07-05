@@ -56,19 +56,12 @@
 
 ---
 
-## 未來發展方向
-
-* 增加更多人格模型，強化行為模擬的細緻程度。
-* 優化多代理協作效能，支援更大規模任務。
-* 增加更完整的任務代理種類
-
----
-
 ## 參考文獻
 
 * [Magentic-One](https://arxiv.org/abs/2411.04468)
 * [Language Agent Tree Search](https://arxiv.org/abs/2310.04406)
 * [Agentic Memory for LLM Agents](https://arxiv.org/abs/2502.12110)
+* [Memory-augmented Query Reconstruction for LLM-based Knowledge Graph Reasoning](https://arxiv.org/abs/2503.05193)
 
 ---
 
@@ -76,3 +69,10 @@
 
 若有任何問題或建議，歡迎透過 [GitHub Issues](https://github.com/yan-930521/Proj.Nova/issues) 與我聯繫！
 
+
+## To DO
+- [ ] 目前的記憶查詢方法還是最原始的RAG + 記憶網路，試著將原本的MemoryNote結構更新為更貼近knowledge graph的方式儲存。
+- [ ] 增加更多人格模型，強化行為模擬的細緻程度。
+- [ ] 優化多代理協作效能，支援更大規模任務。
+- [ ] 增加更完整的任務代理人種類。
+- [ ] 允許TaskOrchestrator自行編寫子任務代理人。
