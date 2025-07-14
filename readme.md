@@ -74,7 +74,7 @@ Nova（控制中樞）
 └── BehaviorValidator（輸出風險與倫理審查）
 ```
 #### 流程圖
-<image src="./asset/Mermaid Chart-2025-07-14-072613">
+<image src="./asset/Mermaid Chart-2025-07-14-072613.png">
 
 ### 3. 自適應任務處理模組
 
