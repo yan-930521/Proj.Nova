@@ -39,6 +39,7 @@ Nova 是一套高度模組化、可擴展的 AI 系統架構，設計目標為�
 * https://github.com/langchain-ai/langgraph-memory/
 * https://github.com/agiresearch/A-mem/
 * https://github.com/OSU-NLP-Group/HippoRAG/
+* https://github.com/MemTensor/MemOS/
 
 ### 3. 任務調度模組
 實現可彈性組裝與分解的任務調度核心，支援多步驟任務處理、工具鏈串接與代理協作。
@@ -104,6 +105,7 @@ Nova（控制中樞）
 * [Memory-augmented Query Reconstruction for LLM-based Knowledge Graph Reasoning](https://arxiv.org/abs/2503.05193)
 * [HippoRAG: Neurobiologically Inspired Long-Term Memory for Large Language Models](https://arxiv.org/abs/2405.14831)
 * [From RAG to Memory: Non-Parametric Continual Learning for Large Language Models](https://arxiv.org/abs/2502.14802)
+* [MemOS: A Memory OS for AI System](https://arxiv.org/abs/2507.03724)
 
 ---
 
@@ -121,4 +123,5 @@ Nova（控制中樞）
 - [X] 優化TaskOrchestrator的planner機制
 - [ ] 允許Nova自行編寫子任務代理人。
 
-
+### Comments
+* 2025/07/14/ 我發現知識圖譜沒有比樹狀記憶好，應該暫緩主系統開發，專心研究MemOS論文中的架構
