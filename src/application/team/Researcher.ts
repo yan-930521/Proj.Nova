@@ -9,31 +9,26 @@ import { DynamicTool, tool } from '@langchain/core/tools';
 import { StateType } from '@langchain/langgraph';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 
-import { JSONOutputToolsParser } from '../';
-import { ComponentContainer } from '../../../ComponentContainer';
-import { BaseAgent, BaseAgentCallOptions } from '../../../libs/base/BaseAgent';
+import { ComponentContainer } from '../../ComponentContainer';
+import { BaseAgent, BaseAgentCallOptions } from '../../libs/base/BaseAgent';
+import { JSONOutputToolsParser } from '../Nova';
 import { RESEARCHER } from '../prompts/team';
 
 export class Researcher<State extends StateType<any>> extends BaseAgent<State> {
-    node(state: State) {
-        throw new Error('Method not implemented.');
-    }
-
     // static tools: {
     //     deepthinking: DynamicTool
     // };
 
-    constructor(options: BaseAgentCallOptions) {
+    constructor() {
         super({
-            name: "Researcher",
-            ...options
+            name: "Researcher"
         });
 
         this._description = RESEARCHER
     }
 
     protected async initLogic(): Promise<void> {
-        this._llm = await ComponentContainer.getLLMManager().getLLM();
+        const llm = await ComponentContainer.getLLMManager().getLLM();
 
         // Researcher.tools = {
         //     deepthinking: tool(async (question) => {
@@ -51,8 +46,6 @@ export class Researcher<State extends StateType<any>> extends BaseAgent<State> {
         //         schema: z.string().describe("A question or prompt requiring deep analysis or reasoning to be processed by the LLM.")
         //     })
         // }
-
-        this._llm = ComponentContainer.getLLMManager().getLLM()
 
         this._prompt = ChatPromptTemplate.fromMessages([new SystemMessage(RESEARCHER)]);
 

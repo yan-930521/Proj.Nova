@@ -1,7 +1,9 @@
-import { CoreAgent } from './application/core';
-import { LATS } from './application/core/lats/LATS';
+import { MemoryGraph } from './application/memory/MemoryGraph';
+import { Nova } from './application/Nova';
+import { LATS } from './application/task/lats/LATS';
 import { BaseComponent } from './libs/base/BaseComponent';
 import { Config } from './services/Config';
+import { ContextManager } from './services/ContextManager';
 import { LLMManager } from './services/LLMManager';
 import { TaskManager } from './services/TaskManager';
 
@@ -28,7 +30,7 @@ export class ComponentContainer {
             ComponentContainer.instance = new ComponentContainer();
         }
 
-        for(let i in components) {
+        for (let i in components) {
             await this.initializeComponent(components[i].name, async () => {
                 await components[i].init();
                 return components[i];
@@ -39,7 +41,7 @@ export class ComponentContainer {
             Object.values(this.components)
         );
     }
-    
+
     // Config
     static getConfig(): Config {
         return this.components["Config"] as unknown as Config;
@@ -50,13 +52,21 @@ export class ComponentContainer {
         return this.components["LLM"] as unknown as LLMManager;
     }
 
-    // TaskManager
-    static getTaskManager(): TaskManager {
-        return this.components["TaskManager"] as unknown as TaskManager;
+    // ContextManager
+    static getContextManager(): ContextManager {
+        return this.components["ContextManager"] as unknown as ContextManager;
     }
 
-    // LATS
+    static getNova(): Nova {
+        return this.components["Nova"] as unknown as Nova;
+    }
+
     static getLATS(): LATS {
         return this.components["LATS"] as unknown as LATS;
+    }
+
+    // MemoryGraph
+    static getMemoryGraph(): MemoryGraph {
+        return this.components["MemoryGraph"] as unknown as MemoryGraph;
     }
 }

@@ -5,10 +5,10 @@ import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { StateType } from '@langchain/langgraph';
 
-import { JSONOutputToolsParser } from '../';
 import { ComponentContainer } from '../../../ComponentContainer';
-import { BaseAgent, BaseAgentCallOptions } from '../../../libs/base/BaseAgent';
-import { REFLECTION } from '../prompts/lats';
+import { BaseAgent } from '../../../libs/base/BaseAgent';
+import { JSONOutputToolsParser } from '../../Nova';
+import { REFLECTION } from '../../prompts/lats';
 
 export const ReflectionSchema = z.object({
     reflections: z.string().describe("The critique and reflections on the sufficiency, superfluency, and general quality of the response"),
@@ -65,13 +65,9 @@ export const ReflectPrompt = ChatPromptTemplate.fromMessages([
 ]);
 
 export class Reflection<State extends StateType<any>> extends BaseAgent<State> {
-    node(state: State) {
-        throw new Error('Method not implemented.');
-    }
-    constructor(options: BaseAgentCallOptions) {
+    constructor() {
         super({
-            name: "Reflection",
-            ...options
+            name: "Reflection"
         });
     }
 

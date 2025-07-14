@@ -99,7 +99,7 @@ export class LLMManager extends BaseManager<ChatOpenAI<ChatOpenAICallOptions>> {
         const {
             API_KEYS,
             DEFAULT_API_KEY
-        } = await ComponentContainer.getConfig();
+        } = ComponentContainer.getConfig();
 
         const llm = new ChatOpenAI({
             ...option,

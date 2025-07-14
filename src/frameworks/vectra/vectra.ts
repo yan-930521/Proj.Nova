@@ -4,9 +4,7 @@ import { LocalIndex } from 'vectra';
 export const PAYLOAD_KEY = "content";
 export const PATH_KEY = "path";
 export const TIMESTAMP_KEY = "timestamp";
-export const PATCH_PATH = "user/{user_id}/patches/{memory_schema}";
-export const INSERT_PATH = 'user/{user_id}/inserts/{memory_schema}/{memory_id}';
-export const MEMORY_PATH = 'memories/{memory_id}'
+
 
 export class Vectra {
     private static instance: Vectra;

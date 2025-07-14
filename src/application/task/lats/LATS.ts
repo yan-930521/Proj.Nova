@@ -8,10 +8,11 @@ import {
 } from '@langchain/langgraph';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
 
-import { JSONOutputToolsParser } from '../';
 import { ComponentContainer } from '../../../ComponentContainer';
-import { Task, TaskType } from '../../../domain/entities/Task';
+import { Task } from '../../../domain/entities/Task';
+import { BaseAgent } from '../../../libs/base/BaseAgent';
 import { BaseSuperVisor, BaseSuperVisorCallOptions } from '../../../libs/base/BaseSupervisor';
+import { JSONOutputToolsParser } from '../../Nova';
 import { Expansion } from './Expansion';
 import { Node } from './Node';
 import { Reflection, ReflectionData } from './Reflection';
@@ -38,19 +39,18 @@ export class LATS extends BaseSuperVisor {
     };
     static toolNode: ToolNode;
 
-    constructor(options?: BaseSuperVisorCallOptions) {
+    constructor() {
         super({
-            name: "LATS",
-            ...options
+            name: "LATS"
         });
     }
 
     protected async initLogic(): Promise<void> {
-        this._llm = ComponentContainer.getLLMManager().getLLM();
+        const llm = ComponentContainer.getLLMManager().getLLM();
 
         this.members = {
-            expansion: new Expansion({}),
-            reflection: new Reflection({}),
+            expansion: new Expansion(),
+            reflection: new Reflection(),
         }
 
         LATS.tools = {
@@ -66,7 +66,7 @@ export class LATS extends BaseSuperVisor {
             new MessagesPlaceholder("messages"),
         ]);
 
-        this._chain = this.prompt.pipe(this.llm.bindTools(
+        this._chain = this.prompt.pipe(llm.bindTools(
             Object.values(LATS.tools)
         )).withConfig({ runName: "GenerateInitialCandidate" })
 
@@ -115,11 +115,7 @@ export class LATS extends BaseSuperVisor {
         await this.loadMembers();
         this.createGraph();
     }
-
-    node(state: typeof this.AgentState.State): any {
-        throw new Error('Method not implemented.');
-    }
-
+    
     // Determine whether to continue the tree search.
     shouldContinue(state: typeof this.AgentState.State) {
         const root = state.root;
@@ -141,7 +137,7 @@ export class LATS extends BaseSuperVisor {
         const workflow = new StateGraph(this.AgentState);
 
         workflow.addNode(this.name, this.node)
-            .addNode(this.members.expansion.name, this.members.expansion.node)
+            .addNode(this.members.expansion.name, (this.members.expansion as BaseAgent).node)
             .addEdge(START, this.name)
             .addConditionalEdges(this.name, this.shouldContinue.bind(this))
             .addConditionalEdges(this.members.expansion.name, this.shouldContinue.bind(this))
@@ -154,7 +150,7 @@ export class LATS extends BaseSuperVisor {
 
     async processTask(task: Task) {
         const threadConfig = {
-            configurable: { thread_id: task.author.id },
+            configurable: { thread_id: task.user.id },
             recursionLimit: 50
         };
 

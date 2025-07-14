@@ -20,7 +20,7 @@ export class User {
     }
 
     public toString() {
-        let str = `ID: ${this.id}\nName: ${this.name}\nState Data:\n`;
+        let str = `Name: ${this.name}\nState Data:\n`;
         for (let i in this.extraData) {
             let data: string | number | string[] | undefined = this.extraData[i as keyof z.infer<typeof UserState>];
             str += `${i}: `;
@@ -38,7 +38,7 @@ export class User {
     }
 }
 export const UserState = z.object({
-    user_name: z.string().describe("The user's preferred name"),
+    // user_name: z.string().describe("The user's preferred name"),
     age: z.number().default(0).describe("The user's age"),
     relationship_status: z.string().describe("The user's relationship status (e.g., single, married, partnered)"),
     education_level: z.string().describe("The user's highest level of education (e.g., high school, bachelor's, master's)"),

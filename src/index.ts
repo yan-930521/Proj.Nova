@@ -1,25 +1,23 @@
+/**
+ * 非正式(測試用)
+ */
+
 import {
-    Client, EmbedBuilder, Events, GatewayIntentBits, Message, SlashCommandBuilder, TextChannel,
-    VoiceChannel
+    Client, EmbedBuilder, Events, GatewayIntentBits, Message, SlashCommandBuilder, TextChannel
 } from 'discord.js';
-import { createInterface } from 'readline';
 
-import { HumanMessage } from '@langchain/core/messages';
-
-import { CoreAgent } from './application/core';
-import { MemoryNote } from './application/core/amem/Memory';
-import { MemoryManager } from './application/core/amem/MemoryManager';
-import { LATS } from './application/core/lats/LATS';
-import { TaskOrchestrator } from './application/core/TaskOrchestrator';
+import { AssistantResponse } from './application/assistant/Assistant';
+import { Nova } from './application/Nova';
+import { LATS } from './application/task/lats/LATS';
 import { ComponentContainer } from './ComponentContainer';
-import { Character } from './domain/entities/Character';
-import { Task, TaskType } from './domain/entities/Task';
+import { Task, TaskResponse } from './domain/entities/Task';
 import { User } from './domain/entities/User';
 import { LevelDB } from './frameworks/levelDB/LevelDB';
 import { LevelDBTaskRepository } from './frameworks/levelDB/LevelDBTaskRepository';
 import { LevelDBUserRepository } from './frameworks/levelDB/LevelDBUserRepository';
 import { checkVectra, Vectra } from './frameworks/vectra/vectra';
 import { Config } from './services/Config';
+import { ContextManager } from './services/ContextManager';
 import { LLMManager } from './services/LLMManager';
 
 process.on("unhandledRejection", (reason) => {
@@ -48,6 +46,8 @@ const cleanMsg = (content: string) => {
 ComponentContainer.initialize([
     new Config(),
     new LLMManager(),
+    new Nova(),
+    new ContextManager(),
     new LATS()
 ]).then(async () => {
     // 初始化DB
@@ -62,10 +62,6 @@ ComponentContainer.initialize([
     )
 
     await checkVectra();
-
-    const coreAgent = new CoreAgent();
-
-    await coreAgent.init();
 
     client.login(ComponentContainer.getConfig().DISCORD_TOKEN);
 
@@ -112,8 +108,9 @@ ComponentContainer.initialize([
 
         if (ct == "force stop") {
             let list = await LevelDBTaskRepository.getInstance().findByMetadata({
-                author: user,
+                user: user,
             });
+    
             list.map((t) => {
                 t.forceExit.abort();
             });
@@ -122,44 +119,36 @@ ComponentContainer.initialize([
 
         if (ct != "") {
             try {
-                // 創建任務
-                let task = new Task({
-                    author: user,
-                    userInput: ct
-                });
-
-                setTimeout(() => task.forceExit.abort(), 60000 * 6);
-
-                task.on("response", ({ taskResponse, characterResponse }) => {
-                    const costTime = Date.now() - new Date(Number(task.timestamp)).getTime();
-                    if (taskResponse) {
+                const reply = (response: { task?: TaskResponse, assistant?: AssistantResponse }) => {
+                    const costTime = Date.now() - msg.createdTimestamp;
+                    if (response.task) {
                         let channel = getChannel(client, msg.channelId);
                         if (channel) channel.sendTyping();
 
-                        // const embed = new EmbedBuilder({
-                        //     title: taskResponse.sender,
-                        //     description: `${taskResponse.message}`,
-                        //     color: 14194326,
-                        //     footer: {
-                        //         text: `cost: ${costTime / 1000} s`
-                        //     },
-                        //     timestamp: new Date()
-                        // });
+                        const embed = new EmbedBuilder({
+                            title: response.task.sender,
+                            description: `${response.task.message}`,
+                            color: 14194326,
+                            footer: {
+                                text: `cost: ${costTime / 1000} s`
+                            },
+                            timestamp: new Date()
+                        });
 
                         msg.reply({
-                            // embeds: [embed],
-                            content: taskResponse.instruction,
+                            embeds: [embed],
+                            content: response.task.instruction,
                             allowedMentions: {
                                 repliedUser: false
                             }
                         });
                     }
-                    if (characterResponse) {
+                    if (response.assistant) {
                         let channel = getChannel(client, msg.channelId);
                         if (channel) channel.sendTyping();
 
                         const embed = new EmbedBuilder({
-                            description: `${characterResponse.response}\n\n\`${characterResponse.reasoning}\``,
+                            description: `${response.assistant.response}\n\n\`${response.assistant.reasoning}\``,
                             color: 14194326,
                             footer: {
                                 text: `cost: ${costTime / 1000} s`
@@ -174,8 +163,15 @@ ComponentContainer.initialize([
                             }
                         });
                     }
+                }
+
+                ComponentContainer.getNova().UserIO.recieve({
+                    content: ct,
+                    type: 'user',
+                    user,
+                    timestamp: String(msg.createdTimestamp),
+                    reply
                 });
-                coreAgent.processInput(task);
             } catch (error) {
                 console.error('執行任務過程中出錯:', error);
             }

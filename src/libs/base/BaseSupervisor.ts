@@ -6,6 +6,7 @@ import { Runnable } from '@langchain/core/runnables';
 import { Annotation, CompiledStateGraph, END, START, StateGraph } from '@langchain/langgraph';
 
 import { BaseAgent, BaseAgentCallOptions } from './BaseAgent';
+import { BaseComponent } from './BaseComponent';
 
 export const BASE_SUPERVISOR_PROMPT =
     "You are a supervisor tasked with managing a conversation between the" +
@@ -18,7 +19,7 @@ export interface BaseSuperVisorCallOptions extends BaseAgentCallOptions {
     /**
      * member in a team
      */
-    members?: Record<string, BaseAgent>;
+    members?: Record<string, BaseComponent>;
 
     /**
      * options to act next
@@ -29,7 +30,7 @@ export interface BaseSuperVisorCallOptions extends BaseAgentCallOptions {
 /**
  * base supervisor to manage a team
  */
-export abstract class BaseSuperVisor extends BaseAgent implements BaseSuperVisorCallOptions {
+export abstract class BaseSuperVisor<T extends  Record<string, any> = {}> extends BaseAgent<T> implements BaseSuperVisorCallOptions {
     AgentState: ReturnType<typeof Annotation.Root<any>> = Annotation.Root({
         messages: Annotation<BaseMessage[]>({
             reducer: (x, y) => x.concat(y),
@@ -41,13 +42,13 @@ export abstract class BaseSuperVisor extends BaseAgent implements BaseSuperVisor
         }),
     });
 
-    members: Record<string, BaseAgent> = {};
+    members: Record<string, BaseComponent | BaseAgent> = {};
 
     protected _options?: string[];
     protected _graph?: CompiledStateGraph<unknown, unknown>;
     declare protected _chain?: Runnable;
 
-    constructor(options: BaseSuperVisorCallOptions) {
+    constructor(options: BaseSuperVisorCallOptions = {}) {
         super(options);
 
         if (options.members) this.members = options.members;
@@ -61,7 +62,7 @@ export abstract class BaseSuperVisor extends BaseAgent implements BaseSuperVisor
         return this._options;
     }
 
-    get memberlist(): BaseAgent[] {
+    get memberlist(): (BaseComponent)[] {
         return Object.values(this.members);
     }
 
@@ -99,30 +100,7 @@ export abstract class BaseSuperVisor extends BaseAgent implements BaseSuperVisor
      */
     protected abstract initLogic(): Promise<void>;
 
-    /**
-     * 建立流程 
-     */
-    createWorkflow() {
-        const workflow = new StateGraph(this.AgentState)
-            .addNode(this.name, this.chain);
-
-        this.memberlist.forEach((member) => {
-            workflow.addNode(member.name, member.node.bind(member));
-            workflow.addEdge(member.name as typeof START, this.name);
-        });
-
-        workflow.addConditionalEdges(
-            this.name,
-            (x: typeof this.AgentState.State) => x.next,
-        );
-
-        workflow.addEdge(START, this.name);
-
-        return workflow;
-
-    }
-
-    loadMember(member: BaseAgent): Promise<BaseAgent> {
+    loadMember(member: BaseComponent): Promise<BaseComponent> {
         return new Promise(async (res, rej) => {
             try {
                 await member.init();
@@ -137,7 +115,7 @@ export abstract class BaseSuperVisor extends BaseAgent implements BaseSuperVisor
         })
     }
 
-    loadMembers(members?: BaseAgent[]) {
+    loadMembers(members?: BaseComponent[]) {
         if (!members) {
             return Promise.all(Object.values(this.members).map((member) => this.loadMember(member)));
         }
@@ -147,15 +125,7 @@ export abstract class BaseSuperVisor extends BaseAgent implements BaseSuperVisor
         }));
     }
 
-    getMember(memberName: string): BaseAgent | undefined {
+    getMember(memberName: string): BaseComponent | undefined {
         return this.memberlist.find((m) => m.name == memberName);
-    }
-
-    /**
-     * 釋放資源
-     */
-    public override dispose() {
-        super.dispose();
-        // 若有額外資源可於此釋放
     }
 }

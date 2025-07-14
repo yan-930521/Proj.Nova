@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { tool } from '@langchain/core/tools';
 
-import { ComponentContainer } from '../../../ComponentContainer';
+import { ComponentContainer } from '../../ComponentContainer';
 
 export const readFileTool = tool(
     async ({ path }) => {

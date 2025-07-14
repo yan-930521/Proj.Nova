@@ -6,28 +6,34 @@ import {
     _INTERNAL_ANNOTATION_ROOT, Annotation, END, MemorySaver, messagesStateReducer, Send, START,
     StateDefinition, StateGraph, task, UpdateType
 } from '@langchain/langgraph';
+import { ChatOpenAI, ChatOpenAICallOptions } from '@langchain/openai';
 
 import { ComponentContainer } from '../../ComponentContainer';
-import { Task } from '../../domain/entities/Task';
-import { User } from '../../domain/entities/User';
-import { BaseAgentCallOptions } from '../../libs/base/BaseAgent';
+import { Task, TaskResponse } from '../../domain/entities/Task';
+import { BaseAgent, BaseAgentCallOptions } from '../../libs/base/BaseAgent';
 import { BaseSuperVisor } from '../../libs/base/BaseSupervisor';
-import { BaseState } from './';
+import { AssistantResponse } from '../assistant/Assistant';
+import { BaseState } from '../Nova';
 import {
     ORCHESTRATOR_CLOSED_BOOK_PROMPT, ORCHESTRATOR_CLOSED_BOOK_TYPE, ORCHESTRATOR_GET_FINAL_ANSWER,
     ORCHESTRATOR_LEDGER_PROMPT, ORCHESTRATOR_LEDGER_TYPE, ORCHESTRATOR_PLAN_PROMPT,
-    ORCHESTRATOR_PLAN_PROMPT_V2, ORCHESTRATOR_PLAN_TYPE, ORCHESTRATOR_SYNTHESIZE_PROMPT,
-    ORCHESTRATOR_SYSTEM_MESSAGE, ORCHESTRATOR_UPDATE_FACTS_PROMPT, ORCHESTRATOR_UPDATE_PLAN_PROMPT,
-    ORCHESTRATOR_UPDATE_PLAN_TYPE
-} from './prompts/task';
-import { FileManager } from './team/FileManager';
-import { Researcher } from './team/Researcher';
-import { WebSurfer } from './team/WebSurfer';
+    ORCHESTRATOR_PLAN_PROMPT_V2, ORCHESTRATOR_PLAN_PROMPT_V3, ORCHESTRATOR_PLAN_TYPE,
+    ORCHESTRATOR_SYNTHESIZE_PROMPT, ORCHESTRATOR_SYSTEM_MESSAGE, ORCHESTRATOR_UPDATE_FACTS_PROMPT,
+    ORCHESTRATOR_UPDATE_PLAN_PROMPT, ORCHESTRATOR_UPDATE_PLAN_TYPE
+} from '../prompts/task';
+import { getReplyfromSession, Session } from '../SessionContext';
+import { FileManager } from '../team/FileManager';
+import { Researcher } from '../team/Researcher';
+import { WebSurfer } from '../team/WebSurfer';
 
 export const TaskOrchestratorState = Annotation.Root({
     messages: Annotation<BaseMessage[]>({
         reducer: messagesStateReducer,
         default: () => [],
+    }),
+
+    session: Annotation<Session>({
+        reducer: (prev, next) => (next ?? prev),
     }),
 
     task: Annotation<Task>({
@@ -88,6 +94,7 @@ export class TaskOrchestrator extends BaseSuperVisor {
     static MAX_REPLAN = 3;
 
     runingTasks: Record<string, boolean> = {}
+
     constructor(options: BaseAgentCallOptions = {}) {
         super({
             name: options.name ?? "TaskOrchestrator",
@@ -96,11 +103,13 @@ export class TaskOrchestrator extends BaseSuperVisor {
 
     protected async initLogic(): Promise<void> {
         this._llm = ComponentContainer.getLLMManager().getLLM();
+
         await this.loadMembers([
-            new WebSurfer({}),
-            new FileManager({}),
-            new Researcher({})
+            new WebSurfer(),
+            new FileManager(),
+            new Researcher()
         ]);
+
         this.teamDescription = this.memberlist.map((member) => `${member.name}: ${member.description}\n`).join("");
         // `WebSurfer: Specialized in retrieving real-time information from the web using search engines and browsing capabilities.
         // Coder: Expert in writing, debugging, and executing code in various programming languages, including Python and JavaScript.
@@ -109,10 +118,6 @@ export class TaskOrchestrator extends BaseSuperVisor {
 
         this.createGraph();
 
-    }
-
-    node(state: any): any {
-        this.logger.debug("start")
     }
 
     async initializeTask(state: typeof TaskOrchestratorState.State) {
@@ -244,7 +249,8 @@ export class TaskOrchestrator extends BaseSuperVisor {
 
         let {
             replan_counter,
-            stall_counter
+            stall_counter,
+            session
         } = state;
         // Orchestrate the next step
         const ledger_data = await this.updateLedger(state);
@@ -258,16 +264,8 @@ export class TaskOrchestrator extends BaseSuperVisor {
                 state.final_report = await this.prepareFinalAnswer(state);
             }
 
-            
             state.task.final_report = state.final_report;
-            state.task.emit("response", {
-                taskResponse: {
-                    sender: 'Final Report',
-                    instruction: "",
-                    message: state.final_report
-                }
-            })
-            
+
             return END;
         }
         // console.log(state.messages.length)
@@ -276,7 +274,7 @@ export class TaskOrchestrator extends BaseSuperVisor {
             stall_counter++;
             this.logger.debug("stall: " + stall_counter)
             if (stall_counter > TaskOrchestrator.MAX_STALL_BEFORE_REPLAN) {
-                this.logger.debug("replan")
+                this.logger.debug("replan: " + replan_counter)
                 replan_counter++;
                 stall_counter = 0;
                 if (replan_counter > TaskOrchestrator.MAX_REPLAN) {
@@ -286,7 +284,7 @@ export class TaskOrchestrator extends BaseSuperVisor {
                     return END;
                 } else {
                     //  Let's create a new plan
-                    return "updateFactAndPlan";
+                    return "UpdateFactAndPlan";
                 }
             }
         }
@@ -295,8 +293,8 @@ export class TaskOrchestrator extends BaseSuperVisor {
 
 
         let next_agent = state.task_plan.shift(); // get the first plan step
-        if(!next_agent) return "updateFactAndPlan";
-    
+        if (!next_agent) return "UpdateFactAndPlan";
+
         // find the agent with plan
         for (let name in this.members) {
             if (name.toLowerCase() == next_agent[0].toLowerCase()) {
@@ -312,16 +310,16 @@ export class TaskOrchestrator extends BaseSuperVisor {
         const workflow = new StateGraph(this.AgentState);
 
         this.memberlist.forEach(m => {
-            workflow.addNode(m.name, m.node.bind(m));
+            workflow.addNode(m.name, (m as BaseAgent).node.bind(m));
             workflow.addConditionalEdges(m.name as typeof START, this.selectNextAgent.bind(this));
         })
 
         workflow
-            .addNode("initializeTask", this.initializeTask.bind(this))
-            .addNode("updateFactAndPlan", this.updateFactAndPlan.bind(this))
-            .addEdge(START, "initializeTask")
-            .addConditionalEdges("initializeTask", this.selectNextAgent.bind(this))
-            .addConditionalEdges("updateFactAndPlan", this.selectNextAgent.bind(this));
+            .addNode("InitializeTask", this.initializeTask.bind(this))
+            .addNode("UpdateFactAndPlan", this.updateFactAndPlan.bind(this))
+            .addEdge(START, "InitializeTask")
+            .addConditionalEdges("InitializeTask", this.selectNextAgent.bind(this))
+            .addConditionalEdges("UpdateFactAndPlan", this.selectNextAgent.bind(this));
 
         this.graph = workflow.compile({
             checkpointer: new MemorySaver()
@@ -329,22 +327,26 @@ export class TaskOrchestrator extends BaseSuperVisor {
         return workflow;
     }
 
-    async processState(state: typeof BaseState.State, config: RunnableConfig) {
-        const task = state.task;
-
+    async handleTaskCreate(session: Session, task: Task) {
         const threadConfig = {
             configurable: {
                 thread_id: task.id, // 使用任務id
             }
         };
 
-        if(this.graph.checkpointer) {
+        let reply = getReplyfromSession(session);
+
+        if (this.graph.checkpointer) {
             let thread = await this.graph.checkpointer.get(threadConfig);
             if (this.runingTasks[task.id] && thread) {
                 this.logger.debug("update thread for task: " + task.id);
-                await this.graph.updateState(threadConfig, {
+                await this.graph.updateState({
+                    ...threadConfig,
+                    signal: task.forceExit.signal
+                }, {
                     messages: [new HumanMessage(task.userInput)],
                     task_description: task.description,
+                    session,
                     task
                 });
             } else {
@@ -354,9 +356,13 @@ export class TaskOrchestrator extends BaseSuperVisor {
                     {
                         messages: [new HumanMessage(task.userInput)],
                         task_description: task.description,
+                        session,
                         task
                     } as Partial<typeof TaskOrchestratorState.State>,
-                    threadConfig
+                    {
+                        ...threadConfig,
+                        signal: task.forceExit.signal
+                    }
                 );
 
                 let lastStep;
@@ -364,26 +370,45 @@ export class TaskOrchestrator extends BaseSuperVisor {
                     lastStep = step;
                     const [stepName, stepState] = Object.entries(step)[0];
 
-                    if(Object.keys(this.members).includes(stepName) && (stepState as typeof TaskOrchestratorState.State).messages) {
+                    if (Object.keys(this.members).includes(stepName) && (stepState as typeof TaskOrchestratorState.State).messages) {
                         let instruction = (stepState as typeof TaskOrchestratorState.State).messages.shift()?.content ?? "";
                         let msg = (stepState as typeof TaskOrchestratorState.State).messages.map((m) => m.content).join("\n");
-                        task.emit("response", {
-                            taskResponse: {
+
+                        if (reply) reply({
+                            task: {
                                 sender: stepName,
                                 instruction: instruction as string,
                                 message: msg
                             }
-                        })
+                        });
                     }
-                    
+
                     // console.log(stepName, stepState);
                     // // @ts-ignore
                     // console.log("rolled out: ", stepState?.root?.height);
                     // if(stepState?.messages) {
-                        
+
                     // }
                     this.logger.debug("---");
                 }
+
+                session.context.recentMessages.push({
+                    content: task.final_report,
+                    type: 'assistant',
+                    user: session.user,
+                    timestamp: String(Date.now()),
+                    reply: function (response: { assistant?: AssistantResponse; task?: TaskResponse; }): void {
+                        throw new Error('Function not implemented.');
+                    }
+                })
+
+                if (reply) reply({
+                    task: {
+                        sender: 'Final Report',
+                        instruction: "",
+                        message: task.final_report
+                    }
+                })
             }
         }
     }
@@ -401,7 +426,7 @@ export class TaskOrchestrator extends BaseSuperVisor {
     }
 
     private getPlanPrompt(team: string): string {
-        return ORCHESTRATOR_PLAN_PROMPT_V2.replace("{team}", team);
+        return ORCHESTRATOR_PLAN_PROMPT_V3.replace("{team}", team);
     }
 
     private getSynthesizePrompt(task: string, team: string, facts: string, plan: string): string {

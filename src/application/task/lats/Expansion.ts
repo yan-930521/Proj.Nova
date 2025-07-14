@@ -5,21 +5,17 @@ import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts
 import { RunnableConfig } from '@langchain/core/runnables';
 import { StateType } from '@langchain/langgraph';
 
-import { JSONOutputToolsParser } from '../';
 import { ComponentContainer } from '../../../ComponentContainer';
-import { BaseAgent, BaseAgentCallOptions } from '../../../libs/base/BaseAgent';
+import { BaseAgent } from '../../../libs/base/BaseAgent';
+import { JSONOutputToolsParser } from '../../Nova';
 import { LATS } from './LATS';
 import { Node } from './Node';
 import { Reflection, ReflectionData } from './Reflection';
 
 export class Expansion<State extends StateType<any>> extends BaseAgent<State> {
-    node(state: State) {
-        throw new Error('Method not implemented.');
-    }
-    constructor(options: BaseAgentCallOptions) {
+    constructor() {
         super({
-            name: "Expansion",
-            ...options
+            name: "Expansion"
         });
     }
 

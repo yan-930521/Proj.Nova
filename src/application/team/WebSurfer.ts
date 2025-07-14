@@ -9,15 +9,11 @@ import { DynamicTool, tool } from '@langchain/core/tools';
 import { StateType } from '@langchain/langgraph';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 
-import { ComponentContainer } from '../../../ComponentContainer';
-import { BaseAgent, BaseAgentCallOptions } from '../../../libs/base/BaseAgent';
+import { ComponentContainer } from '../../ComponentContainer';
+import { BaseAgent, BaseAgentCallOptions } from '../../libs/base/BaseAgent';
 import { WEBSURFER } from '../prompts/team';
 
 export class WebSurfer<State extends StateType<any>> extends BaseAgent<State> {
-    node(state: State) {
-        throw new Error('Method not implemented.');
-    }
-
     static tools: {
         tavilyTool: TavilySearchResults;
         // wikiTool: WikipediaQueryRun;
@@ -26,17 +22,16 @@ export class WebSurfer<State extends StateType<any>> extends BaseAgent<State> {
     };
 
 
-    constructor(options: BaseAgentCallOptions) {
+    constructor() {
         super({
-            name: "WebSurfer",
-            ...options
+            name: "WebSurfer"
         });
 
         this._description = WEBSURFER;
     }
 
     protected async initLogic(): Promise<void> {
-        this._llm = await ComponentContainer.getLLMManager().getLLM();
+        this._llm = ComponentContainer.getLLMManager().getLLM();
 
         WebSurfer.tools = {
             tavilyTool: new TavilySearchResults({

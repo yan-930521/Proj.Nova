@@ -27,6 +27,12 @@ export interface BaseComponentCallOptions {
      * 模組名稱
      */
     name?: string;
+
+    /**
+     * 模組描述
+     */
+    description?: string;
+    
     /**
      * 可選自訂 Logger
      */
@@ -39,6 +45,14 @@ export abstract class BaseComponent<TEvents extends Record<string, any> = {}> ex
     public startTime: number = 0;
     public logger: Logger;
 
+    protected _description?: string;
+    get description(): string {
+        if (!this._description) {
+            throw new Error("Description is not defined for agent: " + this.name);
+        }
+        return this._description;
+    }
+
     constructor(options: BaseComponentCallOptions) {
         super();
         if (options.name) {
@@ -48,6 +62,7 @@ export abstract class BaseComponent<TEvents extends Record<string, any> = {}> ex
             console.warn('[BaseComponent] 未指定 name，將使用 "UnnamedComponent"');
         }
         this.logger = options.logger ?? new Logger(this.name);
+        this._description = options.description;
 
         this.on("StatusChange", (status: ComponentStatus) => {
             this.logger.info(`StatusChange: ${status}`);

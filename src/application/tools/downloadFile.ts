@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import { tool } from '@langchain/core/tools';
 
-import { ComponentContainer } from '../../../ComponentContainer';
+import { ComponentContainer } from '../../ComponentContainer';
 
 export const downloadFileFromUrlTool = tool(
     async ({ url, filePath }) => {

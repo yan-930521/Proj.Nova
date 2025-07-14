@@ -31,9 +31,9 @@ export class LevelDBTaskRepository implements TaskRepository {
 	async findByMetadata(taskData: Partial<Task>): Promise<Task[]> {
 		return this.tasks.filter(task => {
 			return Object.entries(taskData).every(([key, value]) => {
-				// 特殊處理 author.id 等巢狀屬性
-				if (key === 'author' && (value as User)?.id) {
-					return task.author?.id === (value as User).id;
+				// 特殊處理 user.id 等巢狀屬性
+				if (key === 'user' && (value as User)?.id) {
+					return task.user?.id === (value as User).id;
 				}
 				// 一般直接比對
 				return task[key as keyof Task] === value;

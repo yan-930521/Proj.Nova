@@ -1,4 +1,4 @@
-import { CharacterResponse } from '../../application/core/character/Character';
+import { AssistantResponse } from '../../application/assistant/Assistant';
 import { ComponentContainer } from '../../ComponentContainer';
 import { TypedEvent } from '../../libs/events/Events';
 import { getUid } from '../../libs/utils/string';
@@ -75,19 +75,11 @@ export type TaskResponse = {
     message: string;
 }
 
-export class Task extends TypedEvent<{
-    "updateTask": [Task];
-    "updataRecord": [Task, RecordItem];
-    "updateStatus": [Task, TaskStatus];
-    "response": [{
-        taskResponse?: TaskResponse,
-        characterResponse?: CharacterResponse
-    }]
-}> {
+export class Task {
 
     public id: string = Task.createId();
 
-    public author: User;
+    public user: User;
     public userInput: string = "unknown input";
     public type: TaskType = TaskType.CasualChat;
     public timestamp: string = Date.now().toString();
@@ -103,10 +95,9 @@ export class Task extends TypedEvent<{
     public forceExit = new AbortController();
 
     constructor(
-        taskData: { author: User } & Partial<Task>
+        taskData: { user: User } & Partial<Task>
     ) {
-        super();
-        this.author = taskData.author;
+        this.user = taskData.user;
         Object.assign(this, taskData);
 
         this.statusHistory.push({
@@ -127,17 +118,12 @@ export class Task extends TypedEvent<{
 
     updateRecord(record: RecordItem) {
         this.updateHistory.push(record);
-        this.emit("updataRecord", this, record);
     }
 
     updateTask(taskData: Partial<Task> = {}) {
-        const emitter = this.emitter;
         const forceExit = this.forceExit;
         Object.assign(this, taskData);
-        // recover emitter
-        this.emitter = emitter;
         this.forceExit = forceExit;
-        this.emit("updateTask", this);
     }
 
     updateStatus(newStatus: TaskStatus) {

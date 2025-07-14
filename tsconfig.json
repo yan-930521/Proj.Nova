@@ -104,7 +104,7 @@
     "skipLibCheck": true /* Skip type checking all .d.ts files. */
   },
   "include": [
-    "src",
+    "src", "temp/src-old/Memory.ts", "temp/src-old/MemoryManager.ts", "temp/src-old/SemanticEngine.ts",
   ],
   "exclude": [
     "./test/",

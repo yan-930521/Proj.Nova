@@ -57,7 +57,25 @@ For each step, specify:
 - The expected outputs
 
 Not all team members need to be involved — include them only if their specific expertise is required.
-Ensure the entire process is complete, and that no essential step is omitted.`
+Ensure the entire process is complete, and that no essential step is omitted.`;
+
+export const ORCHESTRATOR_PLAN_PROMPT_V3 = `Fantastic. To address this request we have assembled the following team:
+
+{team}
+
+Based on the team composition, and the known and unknown facts, please devise a detailed and sequential task plan to address the original request.
+
+The plan must be organized as a step list with clear and explicit order, from start to finish.
+
+For each step, specify:
+- The objective of the step
+- The expected outputs
+
+Guidelines:
+- **Avoid assigning consecutive steps to the same team member.**
+- **If the same agent must appear more than once, try to alternate them with other agents when possible.**
+- Only include team members whose expertise is relevant to each specific step.
+- Ensure the process is logically complete — do not omit any essential step.`;
 
 
 export const ORCHESTRATOR_PLAN_TYPE = z.object({
@@ -121,14 +139,14 @@ export const ORCHESTRATOR_LEDGER_TYPE = z.object({
         reason: z.string(),
         answer: z.boolean()
     }),
-    next_speaker: z.object({
-        reason: z.string(),
-        answer: z.string()
-    }).describe("Identify the team member who should speak next, based on the current conversation, prior task plan, and task progress."),
-    instruction_or_question: z.object({
-        reason: z.string(),
-        answer: z.string()
-    })
+    // next_speaker: z.object({
+    //     reason: z.string(),
+    //     answer: z.string()
+    // }).describe("Identify the team member who should speak next, based on the current conversation, prior task plan, and task progress."),
+    // instruction_or_question: z.object({
+    //     reason: z.string(),
+    //     answer: z.string()
+    // })
 });
 
 
