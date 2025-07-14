@@ -73,50 +73,9 @@ Nova（控制中樞）
 ├── DeviceController（虛實設備介接）
 └── BehaviorValidator（輸出風險與倫理審查）
 ```
-<div class="mermaid">
-  ---
-  config:
-    layout: fixed
-  ---
-  flowchart TD
-  subgraph s2["Assistant模組"]
-          Assistant["Assistant<br>唯一對話入口"]
-          PersonaEngine["PersonaEngine<br>人格 / 語調"]
-          SessionContext["SessionContext<br>上下文狀態"]
-          ExpressionPlanner["ExpressionPlanner<br>輸出語氣控制"]
-          TaskOrchestrator["TaskOrchestrator<br>任務協調與流程規劃"]
-    end
-  subgraph s3["TaskOrchestrator模組"]
-          Planner["Planner<br>任務拆解 / 子任務規劃"]
-          SkillLibrary["SkillLibrary<br>技能模組集"]
-          ToolExecutor["ToolExecutor<br>工具調用器"]
-          KnowledgeGateway["KnowledgeGateway<br>外部資料 / API"]
-    end
-  subgraph s4["MemorySystem模組"]
-          MemorySystem["MemorySystem<br>智能記憶代理"]
-          SemanticMemory["SemanticMemory<br>語意知識記憶"]
-          EpisodicMemory["EpisodicMemory<br>事件 / 對話記憶"]
-          ProceduralMemory["ProceduralMemory<br>操作 / 技能經驗"]
-          Profile["Profile<br>使用者特徵 / 偏好"]
-    end
-  subgraph s5["DeviceController模組"]
-          DeviceController["DeviceController<br>設備 / 感測控制器"]
-    end
-  subgraph s6["安全審查"]
-          BehaviorValidator["BehaviorValidator<br>風險 / 安全 / 倫理審查"]
-    end
-  subgraph s1["I/O"]
-          UserIO(["User I/O<br>使用者輸入/輸出"])
-    end
-      Nova["Nova<br>中央控制與資源調度"] ==> MemorySystem & EventMediator["EventMediator"] & DeviceController
-      EventMediator --> Assistant & TaskOrchestrator
-      Assistant --> BehaviorValidator & UserIO & PersonaEngine & SessionContext & ExpressionPlanner
-      BehaviorValidator --> Assistant
-      UserIO --> Assistant
-      Assistant -- 任務轉交 --> TaskOrchestrator
-      TaskOrchestrator --> Planner & SkillLibrary & ToolExecutor & KnowledgeGateway
-      MemorySystem --> SemanticMemory & EpisodicMemory & ProceduralMemory & Profile
-</div>
+#### 流程圖
+<image src="./asset/Mermaid Chart-2025-07-14-072613">
+
 ### 3. 自適應任務處理模組
 
 融合多代理協作機制與語言樹狀搜尋技術，可根據任務需求動態規劃執行策略，靈活因應變動情境。<br>
