@@ -52,6 +52,7 @@ export class Logger {
      */
     error(message: string, loggerName: string = this.name) {
         this.log('error', message);
+        throw new Error(message);
     }
 
     /**

@@ -1,13 +1,13 @@
-import { MemoryEdge } from '../../application/memory/MemoryEdge';
-import { MemoryNode } from '../../application/memory/MemoryNode';
+import { MemoryEdge } from '../../application/memory/tree/MemoryEdge';
+import { MemoryNode } from '../../application/memory/tree/MemoryNode';
 
 export interface GraphRepository {
-    save(graph: {
+    save(grapgId: string, graph: {
         nodes: Record<string, MemoryNode>;
         edges: Record<string, MemoryEdge[]>;
     }): Promise<boolean>;
     
-    load(): Promise<{
+    load(grapgId: string): Promise<{
         nodes: Record<string, MemoryNode>;
         edges: Record<string, MemoryEdge[]>;
     }>;

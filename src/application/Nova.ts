@@ -5,13 +5,10 @@ import {
     Annotation, END, MemorySaver, Send, START, StateDefinition, StateGraph, task, UpdateType
 } from '@langchain/langgraph';
 
-import { ComponentContainer } from '../ComponentContainer';
 import { Task, TaskType } from '../domain/entities/Task';
 import { LevelDBTaskRepository } from '../frameworks/levelDB/LevelDBTaskRepository';
 import { BaseSuperVisor, BaseSuperVisorCallOptions } from '../libs/base/BaseSupervisor';
 import { Assistant, AssistantResponse } from './assistant/Assistant';
-import { InformationExtractor } from './memory/InformationExtractor';
-import { MemoryGraph } from './memory/MemoryGraph';
 import { Session, SessionContext } from './SessionContext';
 import { TaskOrchestrator } from './task/TaskOrchestrator';
 import { Message, UserIO } from './user/UserIO';
@@ -64,13 +61,15 @@ export class Nova extends BaseSuperVisor<NovaEvents> {
 
     protected async initLogic(): Promise<void> {
         await this.loadMembers([this.Assistant, this.TaskOrchestrator, this.UserIO, this.SessionContext]);
-
         
-        this.on("messageCreate", this.UserIO.handleMessageCreate.bind(this.UserIO))
+        this.on("messageCreate", this.UserIO.handleMessageCreate.bind(this.UserIO));
         this.on("messageDispatch", this.Assistant.handleMessageDispatch.bind(this.Assistant));
-        this.on("taskCreate", this.TaskOrchestrator.handleTaskCreate.bind(this.TaskOrchestrator))
+        this.on("taskCreate", this.TaskOrchestrator.handleTaskCreate.bind(this.TaskOrchestrator));
     }
 
+    /**
+     * @deprecated
+     */
     async processInput(task: Task) {
         const threadConfig = {
             configurable: {

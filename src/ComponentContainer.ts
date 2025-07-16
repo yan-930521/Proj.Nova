@@ -1,11 +1,10 @@
-import { MemoryGraph } from './application/memory/MemoryGraph';
+import { MemoryReader } from './application/memory/MemoryReader';
 import { Nova } from './application/Nova';
 import { LATS } from './application/task/lats/LATS';
 import { BaseComponent } from './libs/base/BaseComponent';
 import { Config } from './services/Config';
 import { ContextManager } from './services/ContextManager';
 import { LLMManager } from './services/LLMManager';
-import { TaskManager } from './services/TaskManager';
 
 export class ComponentContainer {
     /**
@@ -65,8 +64,7 @@ export class ComponentContainer {
         return this.components["LATS"] as unknown as LATS;
     }
 
-    // MemoryGraph
-    static getMemoryGraph(): MemoryGraph {
-        return this.components["MemoryGraph"] as unknown as MemoryGraph;
+    static getMemoryReader(): MemoryReader {
+        return this.components["MemoryReader"] as unknown as MemoryReader;
     }
 }

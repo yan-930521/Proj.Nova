@@ -396,7 +396,7 @@ export class TaskOrchestrator extends BaseSuperVisor {
                     content: task.final_report,
                     type: 'assistant',
                     user: session.user,
-                    timestamp: String(Date.now()),
+                    timestamp: Date.now(),
                     reply: function (response: { assistant?: AssistantResponse; task?: TaskResponse; }): void {
                         throw new Error('Function not implemented.');
                     }

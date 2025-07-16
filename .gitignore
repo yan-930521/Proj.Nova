@@ -7,7 +7,6 @@ information/
 model/
 node_modules/
 vars/
-test/
 llama.log
 *.bat
 temp/

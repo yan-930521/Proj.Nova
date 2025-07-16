@@ -11,7 +11,7 @@ export interface Message {
     content: string,
     type: SenderType,
     user: User,
-    timestamp: string
+    timestamp: number
     reply: (response: {
         assistant?: AssistantResponse
         task?: TaskResponse
@@ -48,7 +48,7 @@ export class UserIO extends BaseComponent {
                 if (!session) {
                     session = await ComponentContainer.getNova().SessionContext.create(userId);
                 }
-                session.context.recentMessages = session.context.recentMessages.concat(msg);
+                session.context.inputMessages = session.context.inputMessages.concat(msg);
                 ComponentContainer.getNova().emit("messageDispatch", session);
             }, 5000);
         }

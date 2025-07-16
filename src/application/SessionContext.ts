@@ -10,8 +10,8 @@ import { Message } from './user/UserIO';
 export interface Session {
     id: string
     user: User
-    startedAt: string
-    lastActiveAt: string
+    startedAt: number
+    lastActiveAt: number
     goals: string[]
     isRunning: boolean
     status: SessionStatus
@@ -19,7 +19,9 @@ export interface Session {
 }
 
 export interface Context {
+    inputMessages: Message[];
     recentMessages: Message[];
+    messages: Message[];
     memories: string[];
 }
 
@@ -44,7 +46,7 @@ export const ValidSessionStatusTransitions: Record<SessionStatus, SessionStatus[
 }
 
 export const getReplyfromSession = (session: Session) => {
-    return session.context.recentMessages.filter((m) => m.type == 'user').pop()?.reply
+    return session.context.messages.filter((m) => m.type == 'user').pop()?.reply
     // .sort((a, b) => Number(a.timestamp) - Number(b.timestamp))
 }
 
@@ -74,7 +76,7 @@ export class SessionContext extends BaseComponent {
         let session = this.sessions.get(userId);
         if (session) return session;
         let user = await LevelDBUserRepository.getInstance().findById(userId);
-        let now = String(Date.now());
+        let now = Date.now();
         if (user) return {
             id: SessionContext.createId(),
             user,
@@ -84,7 +86,9 @@ export class SessionContext extends BaseComponent {
             isRunning: false,
             goals: [],
             context: {
+                inputMessages: [],
                 recentMessages: [],
+                messages: [],
                 memories: []
             }
         }
@@ -95,7 +99,7 @@ export class SessionContext extends BaseComponent {
         let existSession = this.sessions.get(userId);
         if (existSession) return existSession;
         let user = await LevelDBUserRepository.getInstance().findById(userId);
-        let now = String(Date.now());
+        let now = Date.now();
         return {
             id: SessionContext.createId(),
             user: user ?? (session.user as User),
@@ -105,7 +109,9 @@ export class SessionContext extends BaseComponent {
             isRunning: false,
             goals: [],
             context: {
+                inputMessages: [],
                 recentMessages: [],
+                messages: [],
                 memories: []
             }
         }
@@ -115,7 +121,7 @@ export class SessionContext extends BaseComponent {
         let session = await this.get(authorId);
         if (session) {
             Object.assign(session, newSession);
-            session.lastActiveAt = String(Date.now());
+            session.lastActiveAt = Date.now();
             this.sessions.set(authorId, session);
         }
     }

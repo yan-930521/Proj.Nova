@@ -181,8 +181,7 @@ export class Assistant extends BaseSuperVisor {
     shouldContinue(state: typeof this.AgentState.State): string | typeof END {
         const messages = state.messages;
         // 簡單說就是寫日記
-
-        if (messages.length % 10 == 0) {
+        if (messages.length > 19) {
             return Assistant.DIARY_MODE;
         }
 
@@ -226,11 +225,11 @@ export class Assistant extends BaseSuperVisor {
         let wordsCount = reasoning.length;
         this.logger.debug(`[reasoning]: ${reasoning}`);
 
-        session.context.recentMessages.push({
+        session.context.inputMessages.push({
             content: `[reasoning]: ${reasoning}`,
             type: 'assistant',
             user: session.user,
-            timestamp: String(Date.now()),
+            timestamp: Date.now(),
             reply: () => { }
         });
 
@@ -319,11 +318,11 @@ export class Assistant extends BaseSuperVisor {
             let wordsCount = response.length;
             this.logger.debug(`[response]: ${response}`);
 
-            session.context.recentMessages.push({
+            session.context.inputMessages.push({
                 content: `[response]: ${response}`,
                 type: 'assistant',
                 user: session.user,
-                timestamp: String(Date.now()),
+                timestamp: Date.now(),
                 reply: () => { }
             });
 
@@ -376,11 +375,11 @@ export class Assistant extends BaseSuperVisor {
         let wordsCount = task_str.length;
         this.logger.debug(`[task]: ${task_str}`);
 
-        session.context.recentMessages.push({
+        session.context.inputMessages.push({
             content: `[task]: ${task_str}`,
             type: 'assistant',
             user: session.user,
-            timestamp: String(Date.now()),
+            timestamp: Date.now(),
             reply: () => { }
         });
 
@@ -392,7 +391,6 @@ export class Assistant extends BaseSuperVisor {
         setTimeout(() => task.forceExit.abort(), 60000 * 6);
         await LevelDBTaskRepository.getInstance().create(task);
         ComponentContainer.getNova().emit("taskCreate", session, task);
-
 
         // 儲存起來 不wait
         ComponentContainer.getNova().SessionContext.update(session.user.id, session);
@@ -419,8 +417,6 @@ export class Assistant extends BaseSuperVisor {
         const { messages, character, session } = state;
 
         const context = await ComponentContainer.getContextManager().getContextById(session.user.id);
-
-        console.log(context)
 
         const response = await this.chain.invoke(
             Assistant.formatCharacter({
@@ -452,20 +448,26 @@ export class Assistant extends BaseSuperVisor {
     }
 
     async handleMessageDispatch(session: Session) {
-        let latest = session.context.recentMessages[session.context.recentMessages.length - 1];
-        let now = new Date(session.lastActiveAt).getTime();
-        const getTimeDetail = (timestamp: string | number) => {
+        let inputs: string[] = [];
+        session.context.inputMessages.forEach((m) => {
+            if(m.type == 'user') inputs.push(m.content);
+        });
+
+        const getTimeDetail = (timestamp: number) => {
             let d = new Date(timestamp);
-            let h = d.getHours();
-            return `[${d.getHours()}:${d.getMinutes()}]`;
+            return `[${d.toLocaleString()}]`;
         }
 
-        session.context.recentMessages = session.context.recentMessages.sort((a, b) => Number(a.timestamp) - Number(b.timestamp))
+        // 上一輪的合併進去 messages
+        session.context.messages.push(...session.context.inputMessages);
+        session.context.recentMessages.push(...session.context.inputMessages);
+        session.context.messages = session.context.messages.sort((a, b) => a.timestamp - b.timestamp);
 
+        session.context.inputMessages = [];
         let reply = getReplyfromSession(session);
 
-        let messages: BaseMessage[] = session.context.recentMessages
-            .slice(session.context.recentMessages.length - 20)
+        let messages: BaseMessage[] = session.context.messages
+            .slice(session.context.messages.length - 20)
             .map((m) => m.type == "user" ?
                 new HumanMessage(`${getTimeDetail(m.timestamp)}: ${m.content}`) :
                 new AIMessage(`${getTimeDetail(m.timestamp)}: ${m.content}`
@@ -479,7 +481,7 @@ export class Assistant extends BaseSuperVisor {
 
         const stream = await this.graph.stream(
             {
-                input: latest.content,
+                input: inputs.join("\n"),
                 character: defatultCharacter,
                 messages,
                 session

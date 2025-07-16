@@ -1,7 +1,9 @@
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { Runnable, RunnableConfig } from '@langchain/core/runnables';
 import { CompiledStateGraph, StateDefinition, StateType } from '@langchain/langgraph';
-import { ChatOpenAI, ChatOpenAICallOptions } from '@langchain/openai';
+import {
+    ChatOpenAI, ChatOpenAICallOptions, OpenAIEmbeddings, OpenAIEmbeddingsParams
+} from '@langchain/openai';
 
 import { BaseComponent, BaseComponentCallOptions } from './BaseComponent';
 
@@ -21,7 +23,8 @@ export interface BaseAgentCallOptions extends BaseComponentCallOptions {
 
 export abstract class BaseAgent<T extends  Record<string, any> = {}> extends BaseComponent<T> implements BaseAgentCallOptions {
     protected _chain?: CompiledStateGraph<any, any, string, StateDefinition, StateDefinition, StateDefinition> | Runnable<any, any, RunnableConfig<Record<string, any>>>;
-    protected _llm?: ChatOpenAI<ChatOpenAICallOptions>
+    protected _llm?: ChatOpenAI<ChatOpenAICallOptions>;
+    protected _embedder?: OpenAIEmbeddings;
     protected _prompt?: ChatPromptTemplate;
 
     constructor(options: BaseAgentCallOptions) {
@@ -43,6 +46,13 @@ export abstract class BaseAgent<T extends  Record<string, any> = {}> extends Bas
             throw new Error("LLM is not defined for agent: " + this.name);
         }
         return this._llm;
+    }
+
+    get embedder(): OpenAIEmbeddings {
+        if (!this._embedder) {
+            throw new Error("Embedder is not defined for agent: " + this.name);
+        }
+        return this._embedder;
     }
 
     get chain(): CompiledStateGraph<any, any, string, StateDefinition, StateDefinition, StateDefinition> | Runnable<any, any, RunnableConfig<Record<string, any>>> {

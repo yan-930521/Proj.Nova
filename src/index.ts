@@ -7,10 +7,12 @@ import {
 } from 'discord.js';
 
 import { AssistantResponse } from './application/assistant/Assistant';
+import { MemoryReader } from './application/memory/MemoryReader';
+import { MemoryTree } from './application/memory/tree/MemoryTree';
 import { Nova } from './application/Nova';
 import { LATS } from './application/task/lats/LATS';
 import { ComponentContainer } from './ComponentContainer';
-import { Task, TaskResponse } from './domain/entities/Task';
+import { TaskResponse } from './domain/entities/Task';
 import { User } from './domain/entities/User';
 import { LevelDB } from './frameworks/levelDB/LevelDB';
 import { LevelDBTaskRepository } from './frameworks/levelDB/LevelDBTaskRepository';
@@ -48,7 +50,8 @@ ComponentContainer.initialize([
     new LLMManager(),
     new Nova(),
     new ContextManager(),
-    new LATS()
+    new LATS(),
+    new MemoryReader()
 ]).then(async () => {
     // 初始化DB
     LevelDB.initialize(
@@ -62,6 +65,79 @@ ComponentContainer.initialize([
     )
 
     await checkVectra();
+
+    const memoryTree = new MemoryTree();
+
+    const cmdParser = async (msg: Message, user: User, input: string) => {
+        const cmd = input.toLowerCase();
+        const reply = (description: string) => {
+            const costTime = Date.now() - msg.createdTimestamp;
+            const embed = new EmbedBuilder({
+                description,
+                color: 14194326,
+                footer: {
+                    text: `cost: ${costTime / 1000} s`
+                },
+                timestamp: new Date()
+            });
+
+            msg.reply({
+                embeds: [embed],
+                allowedMentions: {
+                    repliedUser: false
+                }
+            });
+        }
+        if (cmd == "getmem") {
+            let str = "Memory Tree:\n" + memoryTree.nodeManager.toString();
+            ComponentContainer.getNova().logger.info(str);
+            reply("```" + str + "```");
+            return true;
+        } else if (cmd == "getdmem") {
+            let str = "Memory Tree:\n" + memoryTree.nodeManager.toDetailString();
+            ComponentContainer.getNova().logger.info(str);
+            reply("```" + str + "```");
+            return true;
+        } else if (cmd.startsWith("search")) {
+            const session = await ComponentContainer.getNova().SessionContext.get(user.id);
+            if (!session) return;
+            let querys = input.split(" ");
+            querys.shift();
+            let result = await memoryTree.search(querys.join(" "), 3, session);
+            let str = "Search Memory Tree:\n" + result;
+            ComponentContainer.getNova().logger.info(str);
+            reply("```" + str + "```");
+            return true;
+        } else if (cmd == "optimize") {
+            reply("Start Structure optimize.");
+            await memoryTree.reorganizer.treeOptimize("LongTermMemory", 5, 3, 5);
+            await memoryTree.reorganizer.treeOptimize("UserMemory", 5, 3, 5);
+            reply("Structure optimization finished.");
+            return true;
+        } else if (cmd.startsWith("load")) {
+            let querys = input.split(" ");
+            querys.shift();
+            await memoryTree.loadGraph(querys.join(" "));
+            reply("load graph success");
+            return true;
+        } else if (cmd.startsWith("save")) {
+            let querys = input.split(" ");
+            querys.shift();
+            await memoryTree.saveGraph(querys.join(" "));
+            reply("save graph success");
+            return true;
+        } else if (cmd == "stop_task") {
+            let list = await LevelDBTaskRepository.getInstance().findByMetadata({
+                user: user,
+            });
+            list.map((t) => {
+                ComponentContainer.getNova().logger.info("Force stop task: " + t.id);
+                t.forceExit.abort();
+            });
+            return true;
+        }
+        return false;
+    }
 
     client.login(ComponentContainer.getConfig().DISCORD_TOKEN);
 
@@ -106,20 +182,12 @@ ComponentContainer.initialize([
 
         let ct = cleanMsg(content); //.split(" ").join("，");
 
-        if (ct == "force stop") {
-            let list = await LevelDBTaskRepository.getInstance().findByMetadata({
-                user: user,
-            });
-    
-            list.map((t) => {
-                t.forceExit.abort();
-            });
-            return;
-        }
 
         if (ct != "") {
             try {
-                const reply = (response: { task?: TaskResponse, assistant?: AssistantResponse }) => {
+                let result = await cmdParser(msg, user, ct);
+                if (result) return;
+                const reply = async (response: { task?: TaskResponse, assistant?: AssistantResponse }) => {
                     const costTime = Date.now() - msg.createdTimestamp;
                     if (response.task) {
                         let channel = getChannel(client, msg.channelId);
@@ -163,13 +231,18 @@ ComponentContainer.initialize([
                             }
                         });
                     }
+
+                    const session = await ComponentContainer.getNova().SessionContext.get(user.id);
+                    if (!session) return;
+                    const memories = await ComponentContainer.getMemoryReader().extractFromMessages(session);
+                    await memoryTree.add(memories);
                 }
 
                 ComponentContainer.getNova().UserIO.recieve({
                     content: ct,
                     type: 'user',
                     user,
-                    timestamp: String(msg.createdTimestamp),
+                    timestamp: msg.createdTimestamp,
                     reply
                 });
             } catch (error) {
@@ -207,10 +280,10 @@ ComponentContainer.initialize([
     //                 }
     //             });
     //             agent.processInput(task);
-    //             loop();
+    //             true;
     //         });
     //     }
 
-    //     loop();
+    //     true;
     // });
 });
