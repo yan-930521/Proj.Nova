@@ -1,6 +1,6 @@
 import { getUid } from '../../../libs/utils/string';
 
-export type EdgeType = "PARENT" | "CAUSE" | "CONDITION" | "RELATE_TO" | "CONFLICT" | "INFERS" | "FOLLOWS" | "AGGREGATES";
+export type EdgeType = "PARENT" | "CAUSE" | "CONDITION" | "RELATE_TO" | "CONFLICT" | "INFERS" | "FOLLOWS" | "AGGREGATES" | "MERGED_TO";
 
 export class MemoryEdge {
     public id: string;

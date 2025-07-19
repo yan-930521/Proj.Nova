@@ -2,6 +2,7 @@ import { OpenAIEmbeddings } from '@langchain/openai';
 
 import { ComponentContainer } from '../../../ComponentContainer';
 import { Vectra } from '../../../frameworks/vectra/vectra';
+import { Session } from '../../SessionContext';
 import { EdgeType, MemoryEdge } from './MemoryEdge';
 import { MemoryNode, NodeMemoryType } from './MemoryNode';
 import { GraphNodeMetadata, NODES_PATH } from './MemoryTree';
@@ -51,9 +52,22 @@ export class NodeManager {
     /**
      * 將tree變成格式化的字串
      */
-    toString(nodes: MemoryNode[] = Array.from(this.nodes.values())) {
+    toString(_nodes: MemoryNode[] | null, session: Session | null, isDetail: boolean, topK?: number) {
+        let nodes = _nodes ?? Array.from(this.nodes.values());
+        if (session) nodes = nodes.filter((n) => {
+            let r = true;
+            if (n.metadata.user_id !== session.user.id) r = false;
+            if (n.metadata.status !== "activated") r = false;
+            if (n.metadata.memory_type == 'WorkingMemory') r = false;
+            // if (n.metadata.session_id) {
+            //     if (n.metadata.session_id !== session.id) r = false;
+            // }
+            return r;
+        });
+
         // 建立子圖
         const visited = new Set<string>();
+        const backgroundSet = new Set<string>();
         const lines: string[] = [];
 
         const printNode = (id: string, depth: number) => {
@@ -61,49 +75,17 @@ export class NodeManager {
             visited.add(id);
 
             const node = this.getNode(id);
-            if (!node || node.metadata.memory_type == 'WorkingMemory') return;
+            if (!node ||
+                (session && node.metadata.user_id !== session.user.id) ||
+                node.metadata.memory_type == 'WorkingMemory' ||
+                node.metadata.status != "activated"
+            ) return;
 
             lines.push(`${'     '.repeat(depth * 2)} - [ ${node.metadata.key ?? node.memory ?? node.id} ]`);
             node.childrenIds.forEach((childId) => printNode(childId, depth + 1));
         };
 
-        const idList = nodes.map((n) => n.id);
-
-        // 找出局部根節點（沒有被其他節點指向的節點）
-        const childIds = new Set<string>();
-
-        Array.from(this.edges.values()).forEach((edgeList) => {
-            for (const edge of edgeList) {
-                if (idList.includes(edge.from) && idList.includes(edge.to)) {
-                    // 這個邊屬於這個節點
-                    if (edge.type == 'PARENT') {
-                        childIds.add(edge.to);
-                    }
-                }
-            }
-        })
-
-        // 或許可以直接比較是否有parentId?
-
-        const rootCandidates = nodes.filter((n) => !childIds.has(n.id));
-        rootCandidates.forEach((can) => {
-            printNode(can.id, 0);
-        });
-
-        return lines.join('\n');
-    }
-
-    /**
-     * 將tree變成格式化的字串
-     */
-    toDetailString(nodes: MemoryNode[] = Array.from(this.nodes.values())) {
-        // 建立子圖
-        const visited = new Set<string>();
-        const lines: string[] = [];
-
-        const backgroundSet = new Set<string>();
-
-        const printNode = (id: string, depth: number) => {
+        const printNodeDetail = (id: string, depth: number) => {
             if (visited.has(id)) return;
             visited.add(id);
 
@@ -112,22 +94,31 @@ export class NodeManager {
 
             const indent = '  '.repeat(depth * 2);
             const title = node.metadata.key ?? node.memory ?? node.id;
-            const status = node.metadata.status ?? 'unknown';
-            const type = node.metadata.type ?? 'unknown';
-            const memoryTime = node.metadata.memory_time ?? 'unknown';
-            const source = node.metadata.source ?? 'unknown';
-            const tags = (node.metadata.tags ?? []).join(', ') || 'none';
+
             const padding = "   "
             lines.push(`${indent} - [ ${title} ]`);
-            lines.push(`${indent + padding}  status: ${status}`);
-            lines.push(`${indent + padding}  type: ${type}`);
-            lines.push(`${indent + padding}  source: ${source}`);
-            lines.push(`${indent + padding}  tags: ${tags}`);
-            if (node.metadata.background && !backgroundSet.has(node.metadata.background)) {
-                backgroundSet.add(node.metadata.background)
-                lines.push(`${indent + padding}  background: ${node.metadata.background}`);
+
+            const memory = node.memory;
+            lines.push(`${indent + padding}  memory: ${memory}`);
+            
+            if (node.childrenIds.length == 0) {
+                const status = node.metadata.status ?? 'unknown';
+                const type = node.metadata.type ?? 'unknown';
+                const memoryTime = node.metadata.memory_time ?? 'unknown';
+                const source = node.metadata.source ?? 'unknown';
+                const tags = (node.metadata.tags ?? []).join(', ') || 'none';
+                lines.push(`${indent + padding}  status: ${status}`);
+                lines.push(`${indent + padding}  type: ${type}`);
+                lines.push(`${indent + padding}  source: ${source}`);
+                lines.push(`${indent + padding}  tags: ${tags}`);
+                if (node.metadata.background && !backgroundSet.has(node.metadata.background)) {
+                    backgroundSet.add(node.metadata.background);
+                    lines.push(`${indent + padding}  background: ${node.metadata.background}`);
+                }
+            } else {
+                node.childrenIds.forEach((childId) => printNodeDetail(childId, depth + 1));
             }
-            node.childrenIds.forEach((childId) => printNode(childId, depth + 1));
+
         };
 
         const idList = nodes.map((n) => n.id);
@@ -148,9 +139,17 @@ export class NodeManager {
 
         // 或許可以直接比較是否有parentId?
 
-        const rootCandidates = nodes.filter((n) => !childIds.has(n.id));
+        let rootCandidates = nodes.filter((n) => !childIds.has(n.id)).sort((a, b) => {
+            let tb = b.metadata.updated_at ?? b.metadata.created_at ?? 0;
+            let ta = a.metadata.updated_at ?? a.metadata.created_at ?? 0;
+            return tb - ta;
+        });
+
+        if (topK) rootCandidates = rootCandidates.slice(0, topK);
+
         rootCandidates.forEach((can) => {
-            printNode(can.id, 0);
+            if (isDetail) printNodeDetail(can.id, 0);
+            else printNode(can.id, 0);
         });
 
         return lines.join('\n');
@@ -194,6 +193,8 @@ export class NodeManager {
             metadata: this.createGraphNodeMetadata(memoryNode)
         });
     }
+
+    saveNode = this.addNode;
 
     addEdge(edge: MemoryEdge) {
         let entry = this.edges.get(edge.from);

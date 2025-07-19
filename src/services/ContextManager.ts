@@ -1,3 +1,4 @@
+import { Session } from '../application/SessionContext';
 import { LevelDBDiaryRepository } from '../frameworks/levelDB/LevelDBDiaryRepository';
 import { LevelDBUserRepository } from '../frameworks/levelDB/LevelDBUserRepository';
 import { BaseComponent } from '../libs/base/BaseComponent';
@@ -13,9 +14,10 @@ export class ContextManager extends BaseComponent {
 
     }
 
-    async getContextById(userId: string): Promise<string> {
+    async getContext(session: Session): Promise<string> {
         let context = this.getBaseContext();
-        context += await this.getUserInfo(userId);
+        context += await this.getUserInfo(session.user.id);
+        context += await this.getMemory(session);
         context += await this.getDiary();
         return context;
     }
@@ -32,6 +34,10 @@ export class ContextManager extends BaseComponent {
             return "用戶資訊:\n" + user.toString() + "\n";
         }
         return "";
+    }
+
+    async getMemory(session: Session) {
+        return session.context.memories.length > 0 ? "用戶相關記憶:\n" + session.context.memories.join("\n") : "";
     }
 
     async getDiary() {

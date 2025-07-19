@@ -5,9 +5,11 @@
 import { createInterface } from 'readline';
 
 import { AssistantResponse } from '../application/assistant/Assistant';
+import { MemoryCube } from '../application/memory/MemoryCube';
 import { MemoryReader } from '../application/memory/MemoryReader';
 import { MemoryTree } from '../application/memory/tree/MemoryTree';
 import { Nova } from '../application/Nova';
+import { Session } from '../application/SessionContext';
 import { LATS } from '../application/task/lats/LATS';
 import { Message } from '../application/user/UserIO';
 import { ComponentContainer } from '../ComponentContainer';
@@ -53,50 +55,47 @@ ComponentContainer.initialize([
         output: process.stdout,
     });
 
-    const memoryTree = new MemoryTree();
+    const cube = new MemoryCube();
+    await cube.loadCube(ComponentContainer.getConfig().defaultCharacter);
 
-    let user = await LevelDBUserRepository.getInstance().findById("test_admin");
+    let user = await LevelDBUserRepository.getInstance().findById("823885929830940682");
     if (!user) {
-        user = new User("test_admin", "admin", {})
+        user = new User("823885929830940682", "櫻2", {})
         let res = await LevelDBUserRepository.getInstance().create(user);
         if (!res || !user) return;
     }
 
+    const session = await ComponentContainer.getNova().SessionContext.ensureSession(user.id);
+
     const loop = () => {
         rl.question('', async (input) => {
+            session.context.memories = cube.getMemory(session).split("\n");
             const cmd = input.toLowerCase();
             if (cmd == "exit") {
                 return;
-            } else if (cmd == "clear") {
-                ComponentContainer.getNova().logger.info("Chat history cleared.");
-                return loop();
             } else if (cmd == "getmem") {
-                ComponentContainer.getNova().logger.info("Memory Tree:\n" + memoryTree.nodeManager.toString());
+                cube.toString(session);
                 return loop();
             } else if (cmd == "getdmem") {
-                ComponentContainer.getNova().logger.info("Memory Tree:\n" + memoryTree.nodeManager.toDetailString());
+                cube.toDetailString(session)
                 return loop();
             } else if (cmd.startsWith("search")) {
-                const session = await ComponentContainer.getNova().SessionContext.get(user.id);
-                if (!session) return;
                 let querys = input.split(" ");
                 querys.shift();
-                let result = await memoryTree.search(querys.join(" "), 3, session);
-                ComponentContainer.getNova().logger.info("Search Memory Tree:\n" + result);
+                let result = await cube.search(querys.join(" "), 3, session);
                 return loop();
             } else if (cmd == "optimize") {
-                await memoryTree.reorganizer.treeOptimize("LongTermMemory", 5, 3, 5);
-                await memoryTree.reorganizer.treeOptimize("UserMemory", 5, 3, 5);
-                return loop();
+                await cube.treeOptimizeLoop();
+                return true;
             } else if (cmd.startsWith("load")) {
                 let querys = input.split(" ");
                 querys.shift();
-                await memoryTree.loadGraph(querys.join(" "))
+                await cube.loadCube()
                 return loop();
-            }else if (cmd.startsWith("save")) {
+            } else if (cmd.startsWith("save")) {
                 let querys = input.split(" ");
                 querys.shift();
-                await memoryTree.saveGraph(querys.join(" "))
+                await cube.saveCube(querys.join(" "))
                 return loop();
             } else if (cmd == "stop_task") {
                 let list = await LevelDBTaskRepository.getInstance().findByMetadata({
@@ -117,10 +116,8 @@ ComponentContainer.initialize([
                 user,
                 timestamp: Date.now(),
                 async reply({ assistant, task }) {
-                    const session = await ComponentContainer.getNova().SessionContext.get(user.id);
-                    if (!session) return;
                     const memories = await ComponentContainer.getMemoryReader().extractFromMessages(session);
-                    await memoryTree.add(memories);
+                    await cube.memoryTree?.add(memories);
                 }
             }
 

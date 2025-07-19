@@ -20,45 +20,46 @@ export interface GraphNodeMetadata extends NodeMemoryMetadata {
     id: string;
     memory: string;
 }
+
+export interface MemoryTreeData {
+    nodes: Record<string, MemoryNode>;
+    edges: Record<string, MemoryEdge[]>;
+}
+
 /**
  * todo
  * 1. limit node amouts
  * 2. merge function
  */
 export class MemoryTree {
-    public id: string;
-
     public nodeManager: NodeManager;
     public reorganizer: Reorganizer;
 
-    public mergeThreshold = 0.9;
-    public similarThreshold = 0.8;
+    public mergeThreshold = 0.7;
+    public similarThreshold = 0.6;
 
     public embedder: OpenAIEmbeddings;
-    constructor(
-        id?: string
-    ) {
-        this.id = id ?? this.createId();
-
+    constructor() {
         this.embedder = ComponentContainer.getLLMManager().getEmbedingModel();
         this.nodeManager = new NodeManager()
         this.reorganizer = new Reorganizer(this.nodeManager);
-
-    }
-
-    /**
-     * 建立ID
-     * @param baseId 
-     * @returns 
-     */
-    createId(baseId: string = getUid()) {
-        return "MemoryTree-" + baseId;
     }
 
     async add(memories: MemoryNode[]) {
-        MemorySystemLogger.debug(`Add memories: \n${memories.map((n) => n.memory).join("\n")}`);
+        let mem_str = memories.map((n) => {
+            return n.memory;
+        }).join("\n");
+
+        MemorySystemLogger.debug(`Add memories: \n${mem_str}`);
+
+
         // Step 1: process memory
-        await Promise.all(memories.map((m) => this.processMemory(m)));
+        // await Promise.all(memories.map((m) => this.processMemory(m)));
+        // 同時對儲存node導致檔案衝突錯誤
+
+        for (const m of memories) {
+            await this.processMemory(m);
+        }
 
         // Step 2: remove oldest memory
 
@@ -105,12 +106,71 @@ export class MemoryTree {
             });
 
         if (similarNodes.length > 0 && similarNodes[0].score >= this.mergeThreshold) {
-            // this.merge()
+            const similarNodeId = similarNodes[0].item.id;
+            const similarNode = this.nodeManager.getNode(similarNodeId);
+            MemorySystemLogger.debug("Similar Nodes " + similarNodeId);
+            if (similarNode) this.merge(memory, similarNode);
         } else {
             // Step 2: Add new node to graph
             await this.nodeManager.addNode(memory);
         }
     }
+
+   async merge(sourceNode: MemoryNode, targetNode: MemoryNode) {
+        const originalId = targetNode.id;
+
+        const mergedText = `${targetNode.memory}\n⟵MERGED⟶\n${sourceNode.memory}`;
+
+        const embedding = await this.embedder.embedQuery(mergedText);
+
+        const mergedMetadata: NodeMemoryMetadata = {
+            ...sourceNode.metadata,
+            key: sourceNode.metadata.key ?? targetNode.metadata.key,
+            tags: this.mergeUnique(targetNode.metadata.tags, sourceNode.metadata.tags),
+            sources: this.mergeUnique(targetNode.metadata.sources, sourceNode.metadata.sources),
+            background: `${targetNode.metadata.background || ''}\n⟵MERGED⟶\n${sourceNode.metadata.background || ''}`,
+            confidence: ((targetNode.metadata.confidence ?? 0.5) + (sourceNode.metadata.confidence ?? 0.5)) / 2,
+            usage: this.mergeUnique(targetNode.metadata.usage, sourceNode.metadata.usage),
+            embedding,
+            updated_at: Date.now(),
+        };
+
+        const mergedNode = new MemoryNode(mergedText, mergedMetadata);
+
+        // 將 merged node 加入 nodeManager
+        await this.nodeManager.addNode(mergedNode);
+
+        // 將原本兩個節點標記為 archived 並加入記錄
+        const archivedSource = new MemoryNode(sourceNode.memory, {
+            ...sourceNode.metadata,
+            status: 'archived',
+        });
+
+        targetNode.metadata.status = "archived";
+
+        this.nodeManager.addNode(archivedSource);
+        this.nodeManager.saveNode(targetNode);
+
+        // 建立 MERGED_TO 邊
+        this.nodeManager.addEdge(new MemoryEdge(originalId, mergedNode.id, 'MERGED_TO'));
+        this.nodeManager.addEdge(new MemoryEdge(archivedSource.id, mergedNode.id, 'MERGED_TO'));
+
+        // 繼承 original 所有 outbound edge（但避免 MERGED_TO 再繼承）
+        const originalEdges = this.nodeManager.getEdges(originalId) ?? [];
+        for (const edge of originalEdges) {
+            if (edge.type === 'MERGED_TO') continue;
+            this.nodeManager.addEdge(new MemoryEdge(mergedNode.id, edge.to, edge.type));
+        }
+
+    }
+
+    /**
+     * 合併陣列並去重
+     */
+    mergeUnique<T>(a: T[] = [], b: T[] = []) {
+        return Array.from(new Set([...a, ...b]));
+    }
+
 
     removeOldestMemory(memort_type: NodeMemoryType, keep: number) {
 
@@ -151,7 +211,7 @@ export class MemoryTree {
             if (node) recursiveSearch(node);
         });
 
-        return this.nodeManager.toDetailString(nodes);
+        return this.nodeManager.toString(nodes, session, true);
     }
 
     async searchByMetadata(vector: number[], k: number = 3, metadata: Partial<NodeMemoryMetadata> | Record<string, any> = {}): Promise<QueryResult<GraphNodeMetadata>[]> {
@@ -185,31 +245,9 @@ export class MemoryTree {
         return query;
     }
 
-    async saveGraph(id: string = this.id) {
-        let data = this.toJSON();
-        let success = await LevelDBGraphRepository.getInstance().save(id, data);
-        if (success) {
-            MemorySystemLogger.debug("save graph success");
-        } else {
-            MemorySystemLogger.debug("save graph failed");
-        }
-    }
-
-    async loadGraph(id: string = this.id) {
-        let data = await LevelDBGraphRepository.getInstance().load(id);
-        this.fromJSON({
-            nodes: data.nodes ?? {},
-            edges: data.edges ?? {}
-        });
-        MemorySystemLogger.debug("load graph success");
-    }
-
     fromJSON({
         nodes, edges
-    }: {
-        nodes: Record<string, MemoryNode>,
-        edges: Record<string, MemoryEdge[]>
-    }) {
+    }: MemoryTreeData) {
         this.nodeManager.nodes.clear();
         this.nodeManager.edges.clear();
         for (const [key, node] of Object.entries(nodes)) {
@@ -231,10 +269,7 @@ export class MemoryTree {
 
     }
 
-    toJSON(): {
-        nodes: Record<string, MemoryNode>;
-        edges: Record<string, MemoryEdge[]>;
-    } {
+    toJSON(): MemoryTreeData {
         const nodesObj: Record<string, MemoryNode> = {};
         const edgesObj: Record<string, MemoryEdge[]> = {};
 

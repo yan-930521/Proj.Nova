@@ -38,19 +38,16 @@ export class UserIO extends BaseComponent {
     }
 
     async handleMessageCreate(msg: Message) {
-        let userId = msg.user.id;
-
+        const userId = msg.user.id;
         const dispatch = () => {
             // 延遲五秒發送蒐集到的訊息陣列給Assistant
             return setTimeout(async () => {
                 // 不放裡面的話每次createmessage都要重新get
-                let session = await ComponentContainer.getNova().SessionContext.get(userId);
-                if (!session) {
-                    session = await ComponentContainer.getNova().SessionContext.create(userId);
-                }
-                session.context.inputMessages = session.context.inputMessages.concat(msg);
+                const session = await ComponentContainer.getNova().SessionContext.ensureSession(userId);
+                session.context.inputMessages = session.context.inputMessages.concat(this.msgList[userId].msgs);
+                this.msgList[userId].msgs = [];
                 ComponentContainer.getNova().emit("messageDispatch", session);
-            }, 5000);
+            }, 3000);
         }
 
         if (!this.msgList[userId]) {

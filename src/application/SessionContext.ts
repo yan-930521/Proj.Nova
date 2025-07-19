@@ -5,17 +5,22 @@ import { LevelDBUserRepository } from '../frameworks/levelDB/LevelDBUserReposito
 import { BaseComponent } from '../libs/base/BaseComponent';
 import { ComponentStatus } from '../libs/enums/component/ComponentStatus';
 import { getUid } from '../libs/utils/string';
+import { MemorySystemLogger } from './memory/base/Memory';
 import { Message } from './user/UserIO';
 
-export interface Session {
-    id: string
-    user: User
-    startedAt: number
-    lastActiveAt: number
-    goals: string[]
-    isRunning: boolean
-    status: SessionStatus
-    context: Context
+export class Session {
+    constructor(
+        public id: string,
+        public user: User,
+        public startedAt: number,
+        public lastActiveAt: number,
+        public goals: string[],
+        public isRunning: boolean,
+        public status: SessionStatus,
+        public context: Context,
+    ) {
+
+    }
 }
 
 export interface Context {
@@ -46,8 +51,7 @@ export const ValidSessionStatusTransitions: Record<SessionStatus, SessionStatus[
 }
 
 export const getReplyfromSession = (session: Session) => {
-    return session.context.messages.filter((m) => m.type == 'user').pop()?.reply
-    // .sort((a, b) => Number(a.timestamp) - Number(b.timestamp))
+    return session.context.messages.filter((m) => m.type == 'user').sort((a, b) => Number(a.timestamp) - Number(b.timestamp)).pop()?.reply
 }
 
 export class SessionContext extends BaseComponent {
@@ -72,59 +76,49 @@ export class SessionContext extends BaseComponent {
         return "Session-" + baseId;
     }
 
-    async get(userId: string): Promise<Session | null> {
+    get(userId: string): Session | null {
         let session = this.sessions.get(userId);
         if (session) return session;
-        let user = await LevelDBUserRepository.getInstance().findById(userId);
-        let now = Date.now();
-        if (user) return {
-            id: SessionContext.createId(),
-            user,
-            startedAt: now,
-            lastActiveAt: now,
-            status: SessionStatus.PENDING,
-            isRunning: false,
-            goals: [],
-            context: {
-                inputMessages: [],
-                recentMessages: [],
-                messages: [],
-                memories: []
-            }
-        }
         return null;
     }
 
-    async create(userId: string, session: Partial<Session> = {}): Promise<Session> {
-        let existSession = this.sessions.get(userId);
+    async ensureSession(userId: string, _session: Partial<Session> = {}): Promise<Session> {
+        let existSession = this.get(userId);
         if (existSession) return existSession;
+        MemorySystemLogger.debug("Creating new session");
         let user = await LevelDBUserRepository.getInstance().findById(userId);
         let now = Date.now();
-        return {
-            id: SessionContext.createId(),
-            user: user ?? (session.user as User),
-            startedAt: now,
-            lastActiveAt: now,
-            status: SessionStatus.PENDING,
-            isRunning: false,
-            goals: [],
-            context: {
+        const session =  new Session(SessionContext.createId(),
+            user ?? (_session.user as User),
+            now,
+            now,
+            [],
+            false,
+            SessionStatus.PENDING,
+            {
                 inputMessages: [],
                 recentMessages: [],
                 messages: [],
                 memories: []
             }
-        }
+        );
+
+        Object.assign(session, _session);
+
+        this.sessions.set(userId, session);
+
+        return session;
     }
 
-    async update(authorId: string, newSession: Partial<Session>) {
-        let session = await this.get(authorId);
-        if (session) {
-            Object.assign(session, newSession);
-            session.lastActiveAt = Date.now();
-            this.sessions.set(authorId, session);
-        }
-    }
+    // dont need?
+    // async update(authorId: string, newSession: Partial<Session>) {
+    //     let session = this.get(authorId);
+    //     if (session) {
+    //         Object.assign(session, newSession);
+    //         session.lastActiveAt = Date.now();
+    //         this.sessions.set(authorId, session);
+    //     }
+    // }
 
     /**
      * 判斷是否超時

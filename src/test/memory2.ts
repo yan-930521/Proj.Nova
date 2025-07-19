@@ -61,7 +61,20 @@ ComponentContainer.initialize([
         let res = await LevelDBUserRepository.getInstance().create(user);
         if (!res || !user) return;
     }
-    const vector = await memoryTree.embedder.embedQuery("pudding");
+    const session = await ComponentContainer.getNova().SessionContext.ensureSession(user.id);
+    
+    const n = await ComponentContainer.getMemoryReader().extractFromMessages(session, [
+        {
+            content: '我喜歡布丁',
+            type: 'user',
+            user,
+            timestamp: Date.now(),
+            reply: function (response: { assistant?: AssistantResponse; task?: TaskResponse; }): void {
+                throw new Error('Function not implemented.');
+            }
+        }
+    ])
+    console.log(n)
     // const results = await Vectra.getInstance().queryItems<GraphNodeMetadata>(vector, 5, {
     //     // @ts-ignore
     //     "namespace": { "$eq": NODES_PATH },

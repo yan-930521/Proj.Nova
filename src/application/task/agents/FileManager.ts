@@ -9,11 +9,11 @@ import { DynamicTool } from '@langchain/core/tools';
 import { StateType } from '@langchain/langgraph';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 
-import { ComponentContainer } from '../../ComponentContainer';
-import { BaseAgent, BaseAgentCallOptions } from '../../libs/base/BaseAgent';
-import { FILESURFER } from '../prompts/team';
-import { downloadFileFromUrlTool } from '../tools/downloadFile';
-import { readDirTool, readFileTool, writeFileTool } from '../tools/file';
+import { ComponentContainer } from '../../../ComponentContainer';
+import { BaseAgent, BaseAgentCallOptions } from '../../../libs/base/BaseAgent';
+import { FILESURFER } from '../../prompts/team';
+import { downloadFileFromUrlTool } from '../../tools/downloadFile';
+import { readDirTool, readFileTool, writeFileTool } from '../../tools/file';
 
 export class FileManager<State extends StateType<any>> extends BaseAgent<State> {
     constructor() {

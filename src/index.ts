@@ -7,9 +7,11 @@ import {
 } from 'discord.js';
 
 import { AssistantResponse } from './application/assistant/Assistant';
+import { MemoryCube } from './application/memory/MemoryCube';
 import { MemoryReader } from './application/memory/MemoryReader';
 import { MemoryTree } from './application/memory/tree/MemoryTree';
 import { Nova } from './application/Nova';
+import { Session } from './application/SessionContext';
 import { LATS } from './application/task/lats/LATS';
 import { ComponentContainer } from './ComponentContainer';
 import { TaskResponse } from './domain/entities/Task';
@@ -66,9 +68,10 @@ ComponentContainer.initialize([
 
     await checkVectra();
 
-    const memoryTree = new MemoryTree();
+    const cube = new MemoryCube();
+    await cube.loadCube(ComponentContainer.getConfig().defaultCharacter);
 
-    const cmdParser = async (msg: Message, user: User, input: string) => {
+    const cmdParser = async (msg: Message, session: Session, input: string) => {
         const cmd = input.toLowerCase();
         const reply = (description: string) => {
             const costTime = Date.now() - msg.createdTimestamp;
@@ -89,49 +92,45 @@ ComponentContainer.initialize([
             });
         }
         if (cmd == "getmem") {
-            let str = "Memory Tree:\n" + memoryTree.nodeManager.toString();
-            ComponentContainer.getNova().logger.info(str);
+            let str = "Memory Tree:\n" + cube.toString(session);
             reply("```" + str + "```");
             return true;
         } else if (cmd == "getdmem") {
-            let str = "Memory Tree:\n" + memoryTree.nodeManager.toDetailString();
-            ComponentContainer.getNova().logger.info(str);
+            let str = "Memory Tree:\n" + cube.toDetailString(session);
             reply("```" + str + "```");
             return true;
         } else if (cmd.startsWith("search")) {
-            const session = await ComponentContainer.getNova().SessionContext.get(user.id);
+            session = await ComponentContainer.getNova().SessionContext.get(session.user.id) as Session;
             if (!session) return;
             let querys = input.split(" ");
             querys.shift();
-            let result = await memoryTree.search(querys.join(" "), 3, session);
-            let str = "Search Memory Tree:\n" + result;
-            ComponentContainer.getNova().logger.info(str);
+            let result = await cube.search(querys.join(" "), 3, session);
+            let str = "Search Tree:\n" + result;
             reply("```" + str + "```");
-            return true;
-        } else if (cmd == "optimize") {
-            reply("Start Structure optimize.");
-            await memoryTree.reorganizer.treeOptimize("LongTermMemory", 5, 3, 5);
-            await memoryTree.reorganizer.treeOptimize("UserMemory", 5, 3, 5);
-            reply("Structure optimization finished.");
             return true;
         } else if (cmd.startsWith("load")) {
             let querys = input.split(" ");
             querys.shift();
-            await memoryTree.loadGraph(querys.join(" "));
+            await cube.loadCube(querys.join(" "));
             reply("load graph success");
+            return true;
+        } else if (cmd == "optimize") {
+            reply("Start Structure optimize.");
+            await cube.treeOptimizeLoop();
+            reply("Structure optimization finished.");
             return true;
         } else if (cmd.startsWith("save")) {
             let querys = input.split(" ");
             querys.shift();
-            await memoryTree.saveGraph(querys.join(" "));
+            await cube.saveCube(querys.join(" "));
             reply("save graph success");
             return true;
         } else if (cmd == "stop_task") {
             let list = await LevelDBTaskRepository.getInstance().findByMetadata({
-                user: user,
+                user: session.user,
             });
             list.map((t) => {
-                ComponentContainer.getNova().logger.info("Force stop task: " + t.id);
+                ComponentContainer.getNova().logger.debug("Force stop task: " + t.id);
                 t.forceExit.abort();
             });
             return true;
@@ -152,10 +151,11 @@ ComponentContainer.initialize([
 
     client.on(Events.MessageCreate, async msg => {
         // if(msg.guildId != "855817825822179329") return;
-        if (msg.author.id == "1105165234911580241") return;
+        if (msg.author.id == (client as Client<true>).user.id) return;
+
 
         if (msg.channelId != "1105093381085995058") {
-            if (!msg.mentions.users.find((user) => user.id == "1105165234911580241")) {
+            if (!msg.mentions.users.find((user) => user.id == (client as Client<true>).user.id)) {
                 return;
             }
         }
@@ -185,7 +185,10 @@ ComponentContainer.initialize([
 
         if (ct != "") {
             try {
-                let result = await cmdParser(msg, user, ct);
+                const session = await ComponentContainer.getNova().SessionContext.ensureSession(user.id)
+                session.context.memories = cube.getMemory(session).split("\n");
+
+                let result = await cmdParser(msg, session, ct);
                 if (result) return;
                 const reply = async (response: { task?: TaskResponse, assistant?: AssistantResponse }) => {
                     const costTime = Date.now() - msg.createdTimestamp;
@@ -216,7 +219,7 @@ ComponentContainer.initialize([
                         if (channel) channel.sendTyping();
 
                         const embed = new EmbedBuilder({
-                            description: `${response.assistant.response}\n\n\`${response.assistant.reasoning}\``,
+                            description: `${response.assistant.response}${response.assistant.reasoning == "" ? "" : "\n\n\`" + response.assistant.reasoning + "\`"}`,
                             color: 14194326,
                             footer: {
                                 text: `cost: ${costTime / 1000} s`
@@ -230,12 +233,10 @@ ComponentContainer.initialize([
                                 repliedUser: false
                             }
                         });
-                    }
 
-                    const session = await ComponentContainer.getNova().SessionContext.get(user.id);
-                    if (!session) return;
-                    const memories = await ComponentContainer.getMemoryReader().extractFromMessages(session);
-                    await memoryTree.add(memories);
+                        const memories = await ComponentContainer.getMemoryReader().extractFromMessages(session);
+                        await cube.memoryTree?.add(memories);
+                    }
                 }
 
                 ComponentContainer.getNova().UserIO.recieve({

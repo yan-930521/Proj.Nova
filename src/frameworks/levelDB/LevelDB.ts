@@ -9,7 +9,7 @@ export class LevelDB {
     constructor(DB_DIR: string, DB_NAME: string) {
         this.level = new Level<string, any>(join(DB_DIR, DB_NAME), {
             valueEncoding: 'json'
-        })
+        });
     }
 
     // 只需要呼叫一次

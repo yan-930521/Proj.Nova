@@ -9,10 +9,10 @@ import { DynamicTool, tool } from '@langchain/core/tools';
 import { StateType } from '@langchain/langgraph';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 
-import { ComponentContainer } from '../../ComponentContainer';
-import { BaseAgent, BaseAgentCallOptions } from '../../libs/base/BaseAgent';
-import { JSONOutputToolsParser } from '../Nova';
-import { RESEARCHER } from '../prompts/team';
+import { ComponentContainer } from '../../../ComponentContainer';
+import { BaseAgent, BaseAgentCallOptions } from '../../../libs/base/BaseAgent';
+import { JSONOutputToolsParser } from '../../Nova';
+import { RESEARCHER } from '../../prompts/team';
 
 export class Researcher<State extends StateType<any>> extends BaseAgent<State> {
     // static tools: {

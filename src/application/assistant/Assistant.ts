@@ -36,7 +36,10 @@ export const AssistantState = Annotation.Root({
     }),
 
     session: Annotation<Session>,
-    call_task: Annotation<boolean>,
+    call_task: Annotation<boolean>({
+        reducer: (_, call_task) => call_task,
+        default: () => false
+    }),
 
     /**
      * 用於暫存回應
@@ -76,7 +79,7 @@ export const ReasoningOutputTool = new DynamicStructuredTool({
     description: "從第一人稱視角思考目前情境，並判斷是否為任務導向的請求。",
     schema: z.object({
         reasoning: z.string()
-            .describe("從第一人稱視角分析，並且詳細推理當前情況。不能在這裡提到任務協調者。"),
+            .describe("從第一人稱視角分析，並且詳細推理當前情況。不能在這裡提到跟判斷任務請求有關的訊息，必須模擬普通人的思考過程。"),
         call_task: z.boolean().describe("是否為任務。")
     }),
     func: async (input) => {
@@ -87,10 +90,10 @@ export const ReasoningOutputTool = new DynamicStructuredTool({
 
 export const ResponseOutputTool = new DynamicStructuredTool({
     name: "response_tool",
-    description: "Generate a response based on reasoning in the tone of a text message",
+    description: "Generate a response in the tone of a text message",
     schema: z.object({
         response: z.string()
-            .describe("Generate a response based on reasoning in the tone of a text message")
+            .describe("Generate a response in the tone of a text message")
     }),
     func: async (input) => {
         const data = JSON.stringify(input, null, 4);
@@ -120,6 +123,7 @@ export class Assistant extends BaseSuperVisor {
     static readonly REASONING_MODE = "REASONING_MODE";
     static readonly GENERAL_MODE = "GENERAL_MODE";
     static readonly DIARY_MODE = "DIARY_MODE";
+    static readonly TOOL_MODE = "DIARY_MODE";
 
     constructor() {
         super({
@@ -193,6 +197,7 @@ export class Assistant extends BaseSuperVisor {
      */
     modeRouter(state: typeof this.AgentState.State): string | typeof END {
         this.logger.debug("Mode routing...");
+        if (state.input.length <= 15) return Assistant.GENERAL_MODE;
         return Assistant.REASONING_MODE;
     }
 
@@ -203,7 +208,7 @@ export class Assistant extends BaseSuperVisor {
 
         const llm = ComponentContainer.getLLMManager().getLLM(Assistant.REASONING_MODE);
 
-        const context = await ComponentContainer.getContextManager().getContextById(session.user.id);
+        const context = await ComponentContainer.getContextManager().getContext(session);
 
         const result = await this.prompt.pipe(
             llm.bindTools([ReasoningOutputTool], { tool_choice: ReasoningOutputTool.name })
@@ -232,9 +237,6 @@ export class Assistant extends BaseSuperVisor {
             timestamp: Date.now(),
             reply: () => { }
         });
-
-        // 儲存起來 不wait
-        ComponentContainer.getNova().SessionContext.update(session.user.id, session);
 
 
         if (call_task) {
@@ -282,7 +284,7 @@ export class Assistant extends BaseSuperVisor {
 
         const { character, input, session, response_metadata, call_task } = state;
 
-        const context = await ComponentContainer.getContextManager().getContextById(session.user.id);
+        const context = await ComponentContainer.getContextManager().getContext(session);
 
         let newState: Partial<typeof this.AgentState.State> = {}
 
@@ -326,9 +328,6 @@ export class Assistant extends BaseSuperVisor {
                 reply: () => { }
             });
 
-            // 儲存起來 不wait
-            ComponentContainer.getNova().SessionContext.update(session.user.id, session);
-
             return {
                 ...state,
                 messages: [
@@ -351,7 +350,7 @@ export class Assistant extends BaseSuperVisor {
 
         const { messages, character, input, session, response_metadata } = state;
 
-        const context = await ComponentContainer.getContextManager().getContextById(session.user.id);
+        const context = await ComponentContainer.getContextManager().getContext(session);
 
 
         const llm = ComponentContainer.getLLMManager().getLLM();
@@ -375,13 +374,13 @@ export class Assistant extends BaseSuperVisor {
         let wordsCount = task_str.length;
         this.logger.debug(`[task]: ${task_str}`);
 
-        session.context.inputMessages.push({
-            content: `[task]: ${task_str}`,
-            type: 'assistant',
-            user: session.user,
-            timestamp: Date.now(),
-            reply: () => { }
-        });
+        // session.context.inputMessages.push({
+        //     content: `[task]: ${task_str}`,
+        //     type: 'assistant',
+        //     user: session.user,
+        //     timestamp: Date.now(),
+        //     reply: () => { }
+        // });
 
         const task = new Task({
             user: session.user,
@@ -391,9 +390,6 @@ export class Assistant extends BaseSuperVisor {
         setTimeout(() => task.forceExit.abort(), 60000 * 6);
         await LevelDBTaskRepository.getInstance().create(task);
         ComponentContainer.getNova().emit("taskCreate", session, task);
-
-        // 儲存起來 不wait
-        ComponentContainer.getNova().SessionContext.update(session.user.id, session);
 
         return {
             messages: [
@@ -416,7 +412,7 @@ export class Assistant extends BaseSuperVisor {
 
         const { messages, character, session } = state;
 
-        const context = await ComponentContainer.getContextManager().getContextById(session.user.id);
+        const context = await ComponentContainer.getContextManager().getContext(session);
 
         const response = await this.chain.invoke(
             Assistant.formatCharacter({
@@ -450,7 +446,7 @@ export class Assistant extends BaseSuperVisor {
     async handleMessageDispatch(session: Session) {
         let inputs: string[] = [];
         session.context.inputMessages.forEach((m) => {
-            if(m.type == 'user') inputs.push(m.content);
+            if (m.type == 'user') inputs.push(m.content);
         });
 
         const getTimeDetail = (timestamp: number) => {
@@ -462,8 +458,8 @@ export class Assistant extends BaseSuperVisor {
         session.context.messages.push(...session.context.inputMessages);
         session.context.recentMessages.push(...session.context.inputMessages);
         session.context.messages = session.context.messages.sort((a, b) => a.timestamp - b.timestamp);
-
         session.context.inputMessages = [];
+
         let reply = getReplyfromSession(session);
 
         let messages: BaseMessage[] = session.context.messages

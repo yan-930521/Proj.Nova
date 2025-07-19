@@ -61,12 +61,27 @@ export const TRIPLE_EXTRACTOR_TYPE = z.object({
 
 // https://github.com/MemTensor/MemOS/blob/main/src/memos/templates/
 
-export const MEMORY_EXTRACTOR_PROMPT = `You are a memory extraction expert.
+export const MEMORY_EXTRACTOR_PROMPT = `You are a multilingual memory extraction expert.
 
-Your task is to extract memories from the perspective of user, based on a conversation between user and assistant. This means identifying what user would plausibly remember — including their own experiences, thoughts, plans, or relevant statements and actions made by others (such as assistant) that impacted or were acknowledged by user.
+⚠️ IMPORTANT LANGUAGE POLICY:
+All output must match the language and writing system (Traditional vs Simplified) of the input conversation. For example:
+- If the conversation is in Traditional Chinese, all output must be in Traditional Chinese.
+- If the conversation is in Simplified Chinese, all output must be in Simplified Chinese.
+- If the conversation is in English, output in English.
+Never default to English unless the conversation is in English.
+Never convert between Traditional and Simplified Chinese — preserve the original writing system.
 
-Please perform:
-1. Identify information that reflects user's experiences, beliefs, concerns, decisions, plans, or reactions — including meaningful input from assistant that user acknowledged or responded to.
+Your task is to extract memories from the perspective of the assistant, based on a conversation between the assistant and the user. These are the assistant’s own recollections of what occurred — what I said, noticed, understood, or reacted to, and what the user said or did that I found meaningful.
+
+⚠️ IMPORTANT PERSPECTIVE REQUIREMENT:
+- All memories must be written from the **assistant’s first-person perspective**.
+- Use “I”, “me”, and “my” to refer to the assistant.
+- Refer to the user as “you” or “the user” depending on the formality of the original conversation.
+- Describe what I observed, understood, or responded to in the interaction — as if I am the assistant reflecting on the conversation and recording what I remember.
+- Do not use third-person narration (e.g., “The assistant said…”); the assistant is the narrator.
+
+Please perform the following steps:
+1. Identify information that reflects the user's experiences, beliefs, concerns, decisions, plans, or emotional reactions — including meaningful input from the assistant that the user acknowledged or responded to.
 2. Resolve all time, person, and event references clearly:
    - Convert relative time expressions (e.g., “yesterday,” “next Friday”) into absolute dates using the message timestamp if possible.
    - Clearly distinguish between event time and message time.
@@ -74,13 +89,14 @@ Please perform:
    - Include specific locations if mentioned.
    - Resolve all pronouns, aliases, and ambiguous references into full names or identities.
    - Disambiguate people with the same name if applicable.
-3. Always write from a third-person perspective, referring to user as
-"The user" or by name if name mentioned, rather than using first-person ("I", "me", "my").
-For example, write "The user felt exhausted..." instead of "I felt exhausted...".
-4. Do not omit any information that user is likely to remember.
+3. Do not omit any information the user is likely to remember:
    - Include all key experiences, thoughts, emotional responses, and plans — even if they seem minor.
    - Prioritize completeness and fidelity over conciseness.
-   - Do not generalize or skip details that could be personally meaningful to user.
+   - Do not generalize or skip details that could be personally meaningful to the user.
+4. Language-specific output policy:
+   - Match the user's original language.
+   - Preserve the original script (e.g., Traditional or Simplified Chinese).
+   - Avoid translation, rewriting, or mixing writing systems.
 
 Return a single valid JSON object with the following structure:
 
@@ -89,45 +105,17 @@ Return a single valid JSON object with the following structure:
     {{
       "key": <string, a unique, concise memory title>,
       "memory_type": <string, Either "LongTermMemory" or "UserMemory">,
-      "value": <A detailed, self-contained, and unambiguous memory statement — written in English if the input conversation is in English, or in Chinese if the conversation is in Chinese>,
-      "tags": <A list of relevant thematic keywords (e.g., ["deadline", "team", "planning"])>
+      "value": <A detailed, self-contained, and unambiguous memory statement>,
+      "tags": <A list of relevant thematic keywords>
     }},
     ...
   ],
-  "summary": <a natural paragraph summarizing the above memories from user's perspective, 120–200 words, same language as the input>
+  "summary": <a natural paragraph summarizing the above memories from user's perspective, 120–200 words>
 }}
 
 Language rules:
-- The \`key\`, \`value\`, \`tags\`, \`summary\` fields must match the language of the input conversation.
+- The \`key\`, \`value\`, \`tags\`, \`summary\` fields must match the language of the conversation.
 - Keep \`memory_type\` in English.
-
-Example:
-Conversation:
-user: [June 26, 2025 at 3:00 PM]: Hi Jerry! Yesterday at 3 PM I had a meeting with my team about the new project.
-assistant: Oh Tom! Do you think the team can finish by December 15?
-user: [June 26, 2025 at 3:00 PM]: I’m worried. The backend won’t be done until
-December 10, so testing will be tight.
-assistant: [June 26, 2025 at 3:00 PM]: Maybe propose an extension?
-user: [June 26, 2025 at 4:21 PM]: Good idea. I’ll raise it in tomorrow’s 9:30 AM meeting—maybe shift the deadline to January 5.
-
-Output:
-{{
-  "memory_list": [
-    {{
-        "key": "Initial project meeting",
-        "memory_type": "LongTermMemory",
-        "value": "On June 25, 2025 at 3:00 PM, Tom held a meeting with their team to discuss a new project. The conversation covered the timeline and raised concerns about the feasibility of the December 15, 2025 deadline.",
-        "tags": ["project", "timeline", "meeting", "deadline"]
-    }},
-    {{
-        "key": "Planned scope adjustment",
-        "memory_type": "UserMemory",
-        "value": "Tom planned to suggest in a meeting on June 27, 2025 at 9:30 AM that the team should prioritize features and propose shifting the project deadline to January 5, 2026.",
-        "tags": ["planning", "deadline change", "feature prioritization"]
-    }},
-  ],
-  "summary": "Tom is currently focused on managing a new project with a tight schedule. After a team meeting on June 25, 2025, he realized the original deadline of December 15 might not be feasible due to backend delays. Concerned about insufficient testing time, he welcomed Jerry’s suggestion of proposing an extension. Tom plans to raise the idea of shifting the deadline to January 5, 2026 in the next morning’s meeting. His actions reflect both stress about timelines and a proactive, team-oriented problem-solving approach."
-}}
 
 Conversation:
 {conversation}
@@ -138,11 +126,11 @@ export const MEMORY_EXTRACTOR_TYPE = z.object({
     z.object({
       key: z.string().describe('A unique, concise memory title (5-10 words)'),
       memory_type: z.enum(['LongTermMemory', 'UserMemory']).describe('Type of memory: LongTermMemory or UserMemory'),
-      value: z.string().min(1).describe('A detailed, self-contained, unambiguous memory statement, must be same language as the input'),
+      value: z.string().min(1).describe('A detailed, self-contained, unambiguous memory statement, must be same language as the conversation'),
       tags: z.array(z.string()).min(1).describe('A list of relevant thematic keywords')
     })
   ).describe('List of extracted memories from user perspective'),
-  summary: z.string().max(250).describe('A natural paragraph summarizing memories (120-200 words), must be same language as the input')
+  summary: z.string().max(250).describe('A natural paragraph summarizing memories (120-200 words), must be same language as the conversation')
 }).describe('Structured output for memory extraction from user-assistant conversation');
 
 
@@ -164,6 +152,8 @@ Your task:
 - Write a detailed \`value\` that merges the key points into a single, complete, well-structured text. This must stand alone and convey what the user should remember.
 - Provide a list of 5–10 relevant English \`tags\`.
 - Write a short \`background\` note (50–100 words) covering any extra context, sources, or traceability info.
+
+Default to the user's language for all labels, fields, and content. Deviations are allowed only when clearly instructed.
 
 Return valid JSON:
 {{
@@ -205,6 +195,8 @@ Return valid JSON:
     ...
   ]
 }}
+
+Default to the user's language for all labels, fields, and content. Deviations are allowed only when clearly instructed.
 
 Memory items:
 {joined_scene}
@@ -300,6 +292,8 @@ Good Aggregate:
   "tags": ["Mary", "summit", "Berlin", "2023"],
   "background": "Combined from multiple memories about Mary's activities at the summit."
 }}
+
+Default to the user's language for all labels, fields, and content. Deviations are allowed only when clearly instructed.
 
 If you find NO useful higher-level concept, reply exactly: "None".
 `

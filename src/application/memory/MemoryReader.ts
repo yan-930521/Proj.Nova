@@ -12,10 +12,10 @@ import { OpenAIEmbeddings } from '@langchain/openai';
 
 import { ComponentContainer } from '../../ComponentContainer';
 import { BaseSuperVisor, BaseSuperVisorCallOptions } from '../../libs/base/BaseSupervisor';
-import { MEMORY_EXTRACTOR_PROMPT, MEMORY_EXTRACTOR_TYPE } from '../prompts/memory';
 import { Session } from '../SessionContext';
 import { Message } from '../user/UserIO';
 import { MemorySystemLogger } from './base/Memory';
+import { MEMORY_EXTRACTOR_PROMPT, MEMORY_EXTRACTOR_TYPE } from './memory';
 import { MemoryNode } from './tree/MemoryNode';
 
 /***
@@ -45,16 +45,20 @@ export class MemoryReader extends BaseSuperVisor {
     }
 
     async extractFromMessages(session: Session, messages: Message[] = []): Promise<MemoryNode[]> {
-        MemorySystemLogger.debug("Extract memory from messages");
-        if(messages.length == 0) {
+        if (messages.length == 0) {
             messages = session.context.recentMessages;
         }
+        if (messages.length == 0) {
+            return [];
+        }
+
+        MemorySystemLogger.debug("Extract memory from messages");
+
         const conversation = messages.map((m) => {
             return `[${new Date(m.timestamp).toLocaleString()}] ${m.type}: ${m.content}`
         }).join("\n");
 
         session.context.recentMessages = [];
-        await ComponentContainer.getNova().SessionContext.update(session.user.id, session);
 
         const result = await this.chains.MemoryExtractor.invoke({
             conversation
@@ -62,7 +66,8 @@ export class MemoryReader extends BaseSuperVisor {
 
         const nodes = await Promise.all(result.memory_list.map(async (m) => {
             let embedding = await this.embedder.embedQuery(m.value);
-            return new MemoryNode(
+
+            let node = new MemoryNode(
                 m.value,
                 {
                     session_id: session.id,
@@ -80,8 +85,9 @@ export class MemoryReader extends BaseSuperVisor {
                     background: result.summary,
                     type: "fact"
                 }
-            )
-        }))
+            );
+            return node;
+        }));
 
         return nodes;
     }

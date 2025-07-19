@@ -53,6 +53,23 @@ export class Config extends BaseComponent {
             name: "",
         }
 
+    /**
+    * Cube資料庫相關設定
+    */
+    public cubeDatabase: {
+        /**
+         * 資料庫所在的資料夾
+         */
+        dir: string,
+        /**
+         * 資料庫的名稱
+         */
+        name: string
+    } = {
+            dir: "",
+            name: "",
+        }
+
     public TAVILY_API_KEY: string = "";
     public BRAVE_FREE_AI: string = "";
     public DISCORD_TOKEN: string = "";
@@ -64,6 +81,8 @@ export class Config extends BaseComponent {
     }> = {};
 
     public DEFAULT_API_KEY: string = "";
+
+    public optimizationTime: number = 1000 * 60 * 60;
 
     constructor() {
         super({

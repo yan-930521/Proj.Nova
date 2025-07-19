@@ -1,3 +1,4 @@
+import { MemoryCube } from './application/memory/MemoryCube';
 import { MemoryReader } from './application/memory/MemoryReader';
 import { Nova } from './application/Nova';
 import { LATS } from './application/task/lats/LATS';

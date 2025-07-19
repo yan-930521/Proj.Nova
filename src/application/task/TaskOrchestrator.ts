@@ -22,9 +22,9 @@ import {
     ORCHESTRATOR_UPDATE_PLAN_PROMPT, ORCHESTRATOR_UPDATE_PLAN_TYPE
 } from '../prompts/task';
 import { getReplyfromSession, Session } from '../SessionContext';
-import { FileManager } from '../team/FileManager';
-import { Researcher } from '../team/Researcher';
-import { WebSurfer } from '../team/WebSurfer';
+import { FileManager } from './agents/FileManager';
+import { Researcher } from './agents/Researcher';
+import { WebSurfer } from './agents/WebSurfer';
 
 export const TaskOrchestratorState = Annotation.Root({
     messages: Annotation<BaseMessage[]>({
