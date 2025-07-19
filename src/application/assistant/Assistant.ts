@@ -79,7 +79,7 @@ export const ReasoningOutputTool = new DynamicStructuredTool({
     description: "從第一人稱視角思考目前情境，並判斷是否為任務導向的請求。",
     schema: z.object({
         reasoning: z.string()
-            .describe("從第一人稱視角分析，並且詳細推理當前情況。不能在這裡提到跟判斷任務請求有關的訊息，必須模擬普通人的思考過程。"),
+            .describe("請從第一人稱視角，模擬一位普通人接收到輸入訊息後的內在推理過程，思考對方的意圖是否涉及具體任務。如果你發現這個請求超出你個人能處理的範圍，你不需要執行該任務，只需要判斷是否應該轉交給 TaskOrchestrator。請自然地描述這段判斷與思考，而不是以系統限制（例如「我無法讀檔案」）為理由推託。這段推理應具有邏輯性與人類的思考節奏，可以使用內心自語風格表達。"),
         call_task: z.boolean().describe("是否為任務。")
     }),
     func: async (input) => {
