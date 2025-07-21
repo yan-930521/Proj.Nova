@@ -1,3 +1,5 @@
+import { MessageContent } from '@langchain/core/messages';
+
 import { ComponentContainer } from '../../ComponentContainer';
 import { TaskResponse } from '../../domain/entities/Task';
 import { User } from '../../domain/entities/User';
@@ -9,6 +11,7 @@ export type SenderType = 'user' | 'assistant'
 
 export interface Message {
     content: string,
+    images: string[],
     type: SenderType,
     user: User,
     timestamp: number

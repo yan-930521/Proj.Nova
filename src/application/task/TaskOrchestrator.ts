@@ -395,6 +395,7 @@ export class TaskOrchestrator extends BaseSuperVisor {
                 session.context.recentMessages.push({
                     content: task.final_report,
                     type: 'assistant',
+                    images: [],
                     user: session.user,
                     timestamp: Date.now(),
                     reply: function (response: { assistant?: AssistantResponse; task?: TaskResponse; }): void {

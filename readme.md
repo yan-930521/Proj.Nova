@@ -18,7 +18,7 @@
 - Code Generate<br>
   [![Code Generate](https://img.youtube.com/vi/uVKFufVW7Go/hqdefault.jpg)](https://www.youtube.com/watch?v=uVKFufVW7Go)
 - Memory Tree, Fast Respond Mode, Task Solve <br>
-  [![Memory Tree, Fast Respond Mode, Task Solve](https://img.youtube.com/vi/5lXqn00GJRI/hqdefault.jpg)](https://www.youtube.com/watch?v=5lXqn00GJRI)
+  [![Memory Tree, Task Solve](https://img.youtube.com/vi/5lXqn00GJRI/hqdefault.jpg)](https://www.youtube.com/watch?v=5lXqn00GJRI)
 
 ---
 

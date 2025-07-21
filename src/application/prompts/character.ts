@@ -7,8 +7,6 @@ export const BASE_CHARACTER_PROMPT = `{description}
 {context}
 
 目前對話:
-{messages}
-
 `;
 
 

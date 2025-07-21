@@ -1,7 +1,9 @@
 import { z } from 'zod';
 
 import { TavilySearchResults } from '@langchain/community/tools/tavily_search';
-import { AIMessage, BaseMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
+import {
+    AIMessage, BaseMessage, HumanMessage, MessageContent, SystemMessage, ToolMessage
+} from '@langchain/core/messages';
 import {
     ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate
 } from '@langchain/core/prompts';
@@ -26,14 +28,8 @@ export interface AssistantResponse {
 }
 
 export const AssistantState = Annotation.Root({
-    messages: Annotation<BaseMessage[]>({
-        reducer: messagesStateReducer,
-        default: () => [],
-    }),
-
-    input: Annotation<string>({
+    input: Annotation<BaseMessage>({
         reducer: (_, action) => action,
-        default: () => "",
     }),
 
     session: Annotation<Session>,
@@ -68,6 +64,11 @@ export const AssistantState = Annotation.Root({
                 history: []
             }
         },
+    }),
+
+    hasImage: Annotation<boolean>({
+        reducer: (_, action) => action,
+        default: () => false
     })
 });
 
@@ -169,22 +170,17 @@ export class Assistant extends BaseSuperVisor {
                 ComponentContainer.getLLMManager().create(Assistant.REASONING_MODE, {
                     temperature: 0.2,
                     maxTokens: 1024,
-                    model: "gpt-4.1",
+                    model: "gpt-4o",
                 });
 
                 this.tools = {
                     tavilyTool: new TavilySearchResults({
-                        maxResults: 4
+                        maxResults: 5
                     }),
 
                 }
 
-
                 this._llm = ComponentContainer.getLLMManager().getLLM();
-
-                this._prompt = Assistant.loadPrompt();
-
-                this._chain = this.prompt.pipe(this.llm);
 
                 this.graph = this.createWorkflow().compile();
 
@@ -212,10 +208,11 @@ export class Assistant extends BaseSuperVisor {
     /**
      * 載入prompt
      */
-    static loadPrompt() {
+    static buildPrompt(messages: BaseMessage[]) {
         return ChatPromptTemplate.fromMessages([
             SystemMessagePromptTemplate.fromTemplate(BASE_CHARACTER_PROMPT),
-            HumanMessagePromptTemplate.fromTemplate("{input}")
+            ...messages,
+            HumanMessagePromptTemplate.fromTemplate("輸入: \n{input}")
         ]);
     }
 
@@ -234,29 +231,39 @@ export class Assistant extends BaseSuperVisor {
         return END;
     }
 
+    clearImage(messages: BaseMessage[]) {
+        return messages.map((m) => {
+            // 若 content 是 string，直接回傳原訊息
+            if (typeof m.content === "string") return m;
+
+            // 若 content 是 array，過濾掉 image_url，保留 text
+            if (Array.isArray(m.content)) {
+                const textParts = m.content
+                    .filter((c) => c.type === "text" && typeof c.text === "string")
+                    .map((c) => c.type === "text" ? c.text as string : "")
+                    .join();
+
+                m.content = textParts;
+            }
+            return m;
+        });
+    }
+
     /**
      * 決定是否思考 / 用於快速響應
      */
     async modeRouter(state: typeof this.AgentState.State): Promise<string> {
         this.logger.debug("Mode routing...");
-        const { messages, character, input, session } = state;
+
+        const { session } = state;
 
         const llm = ComponentContainer.getLLMManager().getLLM();
 
-        const context = await ComponentContainer.getContextManager().getContext(session);
-
-        const result = await this.prompt.pipe(
-            llm.withStructuredOutput(RouterTool.schema)).invoke(
-                Assistant.formatCharacter({
-                    description: character.description,
-                    personality: character.personality,
-                    user: session.user,
-                    rules: character.rules,
-                    context,
-                    messages,
-                    input,
-                }, character)
-            );
+        const result = await llm.withStructuredOutput(RouterTool.schema).invoke(
+            this.clearImage(
+                this.getMessages(session)
+            )
+        );
 
         switch (result.next) {
             case "create_task":
@@ -273,21 +280,21 @@ export class Assistant extends BaseSuperVisor {
     async genReasoning(state: typeof this.AgentState.State) {
         this.logger.debug("Generating Reasoning...");
 
-        const { messages, character, input, session } = state;
+        const { character, input, session } = state;
 
         const llm = ComponentContainer.getLLMManager().getLLM(Assistant.REASONING_MODE);
 
         const context = await ComponentContainer.getContextManager().getContext(session);
 
-        const result = await this.prompt.pipe(
-            llm.withStructuredOutput(ReasoningOutputTool.schema)).invoke(
+        const result = await Assistant.buildPrompt(this.getMessages(session))
+            .pipe(llm.withStructuredOutput(ReasoningOutputTool.schema))
+            .invoke(
                 Assistant.formatCharacter({
                     description: character.description,
                     personality: character.personality,
                     user: session.user,
                     rules: character.rules,
                     context,
-                    messages,
                     input,
                 }, character)
             );
@@ -299,6 +306,7 @@ export class Assistant extends BaseSuperVisor {
         session.context.inputMessages.push({
             content: `[reasoning]: ${reasoning}`,
             type: 'assistant',
+            images: [],
             user: session.user,
             timestamp: Date.now(),
             reply: () => { }
@@ -323,24 +331,13 @@ export class Assistant extends BaseSuperVisor {
     async retrieve(state: typeof this.AgentState.State) {
         this.logger.debug("Retrieve Information...");
 
-        const { messages, input, session, character } = state;
+        const { session } = state;
 
-        const llm = ComponentContainer.getLLMManager().getLLM(Assistant.REASONING_MODE);
+        const llm = ComponentContainer.getLLMManager().getLLM();
 
-        const context = await ComponentContainer.getContextManager().getContext(session);
-
-        const result = await this.prompt.pipe(
-            llm.withStructuredOutput(RetrieveTool.schema)).invoke(
-                Assistant.formatCharacter({
-                    description: character.description,
-                    personality: character.personality,
-                    user: session.user,
-                    rules: character.rules,
-                    context,
-                    messages,
-                    input,
-                }, character)
-            );
+        const result = await llm.withStructuredOutput(RetrieveTool.schema).invoke(
+            this.clearImage(this.getMessages(session))
+        );
 
         // 從記憶庫檢索相關記憶
         const memoryCube = ComponentContainer.getMemoryCube();
@@ -363,18 +360,18 @@ export class Assistant extends BaseSuperVisor {
         // wikiTool: WikipediaQueryRun;
         // braveTool: BraveSearch;
 
-        console.log(tavilyResponse)
-
         session.context.inputMessages.push({
             content: `[memory]:\n${memoryContext}`,
             type: 'assistant',
+            images: [],
             user: session.user,
             timestamp: Date.now(),
             reply: () => { }
         });
         session.context.inputMessages.push({
-            content: `[information]:\n${tavilyResponse.content}`,
+            content: `[information]:\n${tavilyResponse}`,
             type: 'assistant',
+            images: [],
             user: session.user,
             timestamp: Date.now(),
             reply: () => { }
@@ -399,19 +396,24 @@ export class Assistant extends BaseSuperVisor {
     async genResponse(state: typeof this.AgentState.State) {
         this.logger.debug("Generating Response...");
 
-        const { character, input, session, response_metadata } = state;
+        const { character, input, session, response_metadata, hasImage } = state;
 
         const context = await ComponentContainer.getContextManager().getContext(session);
 
-        const result = await this.prompt.pipe(
-            this.llm.withStructuredOutput(ResponseOutputTool.schema)).invoke(
+        let llm = hasImage ? ComponentContainer.getLLMManager().getLLM(Assistant.REASONING_MODE) : this.llm;
+
+        let message = this.getMessages(session);
+        if (!hasImage) message = this.clearImage(message);
+
+        const result = await Assistant.buildPrompt(message)
+            .pipe(llm.withStructuredOutput(ResponseOutputTool.schema))
+            .invoke(
                 Assistant.formatCharacter({
                     description: character.description,
                     personality: character.personality,
                     user: session.user,
                     rules: character.rules,
                     context,
-                    messages: state.messages,
                     input,
                 }, character)
             )
@@ -422,6 +424,7 @@ export class Assistant extends BaseSuperVisor {
 
         session.context.inputMessages.push({
             content: `[response]: ${response}`,
+            images: [],
             type: 'assistant',
             user: session.user,
             timestamp: Date.now(),
@@ -447,35 +450,20 @@ export class Assistant extends BaseSuperVisor {
     async genTask(state: typeof this.AgentState.State) {
         this.logger.debug("Calling TaskOrchestrator...");
 
-        const { messages, character, input, session, response_metadata } = state;
-
-        const context = await ComponentContainer.getContextManager().getContext(session);
-
+        const { input, session, response_metadata } = state;
 
         const llm = ComponentContainer.getLLMManager().getLLM();
 
-        const result = await this.prompt.pipe(
-            llm.bindTools([CreateTask], { tool_choice: CreateTask.name }).pipe(JSONOutputToolsParser)
-        ).invoke(
-            Assistant.formatCharacter({
-                description: character.description,
-                personality: character.personality,
-                user: session.user,
-                rules: character.rules,
-                context,
-                messages,
-                input,
-            }, character)
-        )
+        const result = await llm.withStructuredOutput(CreateTask.schema).invoke(this.clearImage(this.getMessages(session)));
 
         // console.log(response)
-        let task_str = result[0].args.task;
+        let task_str = result.task;
         let wordsCount = task_str.length;
         this.logger.debug(`[task]: ${task_str}`);
 
         const task = new Task({
             user: session.user,
-            userInput: input,
+            userInput: JSON.stringify(input.content),
             description: task_str
         });
 
@@ -502,21 +490,22 @@ export class Assistant extends BaseSuperVisor {
     async writeDiary(state: typeof this.AgentState.State) {
         this.logger.debug("Writing Diary...");
 
-        const { messages, character, session } = state;
+        const { character, session } = state;
+
+        const llm = ComponentContainer.getLLMManager().getLLM();
 
         const context = await ComponentContainer.getContextManager().getContext(session);
 
-        const response = await this.chain.invoke(
+        const response = await Assistant.buildPrompt(this.clearImage(this.getMessages(session))).pipe(llm).invoke(
             Assistant.formatCharacter({
                 description: character.description,
                 personality: character.personality,
                 user: session.user,
                 rules: character.rules,
                 context,
-                messages,
                 input: ExtendDiary,
             }, character)
-        )
+        );
 
         // 保留最後10則訊息
         session.context.messages = session.context.messages.slice(-10);
@@ -524,7 +513,7 @@ export class Assistant extends BaseSuperVisor {
         // 更新日記
         await LevelDBDiaryRepository.getInstance().update(
             new Date().toLocaleDateString(),
-            response.content
+            String(response.content)
         );
 
         this.logger.debug(`[diary]: ${response.content}`);
@@ -533,34 +522,22 @@ export class Assistant extends BaseSuperVisor {
     }
 
     async handleMessageDispatch(session: Session) {
-        let inputs: string[] = [];
+        let inputs: MessageContent[] = [];
+        let imagesFlag: boolean = false;
+
         session.context.inputMessages.forEach((m) => {
-            if (m.type == 'user') inputs.push(m.content);
+            if (m.type == 'user') {
+                inputs.push(m.content);
+                if (m.images.length > 0) imagesFlag = true;
+            }
         });
 
-        const getTimeDetail = (timestamp: number) => {
-            let d = new Date(timestamp);
-            return `[${d.toLocaleString()}]`;
-        }
-
-        // 上一輪的合併進去 messages
-        session.context.messages.push(...session.context.inputMessages);
-        session.context.recentMessages.push(...session.context.inputMessages);
+        // sort
         session.context.messages = session.context.messages.sort((a, b) => a.timestamp - b.timestamp);
-        session.context.inputMessages = [];
 
         // 更新中期記憶
         const cube = ComponentContainer.getMemoryCube();
         session.context.memories = (await cube.getWorkingMemory(session)).map((n) => n.memory);
-
-        let reply = getReplyfromSession(session);
-
-        let messages: BaseMessage[] = session.context.messages
-            .slice(session.context.messages.length - 20)
-            .map((m) => m.type == "user" ?
-                new HumanMessage(`${getTimeDetail(m.timestamp)}: ${m.content}`) :
-                new AIMessage(`${getTimeDetail(m.timestamp)}: ${m.content}`
-                ));
 
         const defatultCharacter = await CharacterObj.getDefaultCharacter();
 
@@ -572,11 +549,18 @@ export class Assistant extends BaseSuperVisor {
             {
                 input: inputs.join("\n"),
                 character: defatultCharacter,
-                messages,
-                session
+                session,
+                hasImage: imagesFlag
             },
             threadConfig
         );
+
+        // 上一輪的合併進去 messages儲存
+        session.context.messages.push(...session.context.inputMessages);
+        session.context.recentMessages.push(...session.context.inputMessages);
+        session.context.inputMessages = [];
+
+        let reply = getReplyfromSession(session);
 
         try {
             let lastStep;
@@ -588,9 +572,6 @@ export class Assistant extends BaseSuperVisor {
                 assistant: lastStep[Assistant.GENERAL_MODE].response_metadata
             });
 
-            return {
-                call_task: lastStep.call_task
-            }
         } catch (err) {
             this.logger.error(String(err));
             if (reply) reply({
@@ -601,6 +582,47 @@ export class Assistant extends BaseSuperVisor {
                 }
             });
         }
+    }
+
+    getTimeDetail(timestamp: number) {
+        let d = new Date(timestamp);
+        return `[${d.toLocaleString()}]`;
+    }
+
+    getMessages(session: Session): BaseMessage[] {
+        // 舊的訊息不需要image
+        let removeImageMessages: BaseMessage[] = session.context.messages
+            .slice(session.context.messages.length - 20)
+            .map((m) => {
+                if (m.type == "assistant") return new AIMessage(`${this.getTimeDetail(m.timestamp)}: ${m.content}`);
+                else return new HumanMessage(`${this.getTimeDetail(m.timestamp)}: ${m.content}`);
+            });
+
+        let newMessage: BaseMessage[] = session.context.inputMessages.map((m) => {
+            if (m.images.length == 0) {
+                if (m.type == "assistant") return new AIMessage(`${this.getTimeDetail(m.timestamp)}: ${m.content}`);
+                else return new HumanMessage(`${this.getTimeDetail(m.timestamp)}: ${m.content}`);
+            }
+            let imgs = m.images.map((c) => {
+                return {
+                    type: "image_url",
+                    image_url: { url: c },
+                };
+            });
+            let msg = {
+                content: [
+                    {
+                        type: "text",
+                        text: `${this.getTimeDetail(m.timestamp)}: ${m.content}`
+                    },
+                    ...imgs
+                ]
+            }
+            if (m.type == "assistant") return new AIMessage(msg);
+            else return new HumanMessage(msg);
+        });
+
+        return removeImageMessages.concat(newMessage);
     }
 
 

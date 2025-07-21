@@ -6,6 +6,8 @@ import {
     Client, EmbedBuilder, Events, GatewayIntentBits, Message, SlashCommandBuilder, TextChannel
 } from 'discord.js';
 
+import { MessageContentComplex } from '@langchain/core/messages';
+
 import { AssistantResponse } from './application/assistant/Assistant';
 import { MemoryCube } from './application/memory/MemoryCube';
 import { MemoryReader } from './application/memory/MemoryReader';
@@ -185,11 +187,11 @@ ComponentContainer.initialize([
         // let ct = cleanMsg(content); //.split(" ").join("，");
         let ct = content; //.split(" ").join("，");
         // read msg from self like ai
-        if(ct == "" && embeds.length > 0 && embeds[0].description !== null ) {
+        if (ct == "" && embeds.length > 0 && embeds[0].description !== null) {
             ct = embeds[0].description;
         }
 
-        if (ct != "") {
+        if (ct != "" || msg.attachments.size > 0) {
             try {
                 const session = await ComponentContainer.getNova().SessionContext.ensureSession(user.id);
 
@@ -246,6 +248,7 @@ ComponentContainer.initialize([
 
                 ComponentContainer.getNova().UserIO.recieve({
                     content: ct,
+                    images: Array.from(msg.attachments.values()).map((f) => f.url),
                     type: 'user',
                     user,
                     timestamp: msg.createdTimestamp,

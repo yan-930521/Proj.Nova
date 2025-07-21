@@ -4,7 +4,10 @@
 
 import { createInterface } from 'readline';
 
-import { AssistantResponse } from '../application/assistant/Assistant';
+import { HumanMessage } from '@langchain/core/messages';
+import { ChatPromptTemplate, HumanMessagePromptTemplate } from '@langchain/core/prompts';
+
+import { Assistant, AssistantResponse } from '../application/assistant/Assistant';
 import { MemoryReader } from '../application/memory/MemoryReader';
 import { GraphNodeMetadata, MemoryTree, NODES_PATH } from '../application/memory/tree/MemoryTree';
 import { Nova } from '../application/Nova';
@@ -53,28 +56,28 @@ ComponentContainer.initialize([
         output: process.stdout,
     });
 
-    const memoryTree = new MemoryTree();
-
-    let user = await LevelDBUserRepository.getInstance().findById("test_admin");
-    if (!user) {
-        user = new User("test_admin", "admin", {})
-        let res = await LevelDBUserRepository.getInstance().create(user);
-        if (!res || !user) return;
-    }
-    const session = await ComponentContainer.getNova().SessionContext.ensureSession(user.id);
-    
-    const n = await ComponentContainer.getMemoryReader().extractFromMessages(session, [
-        {
-            content: '我喜歡布丁',
-            type: 'user',
-            user,
-            timestamp: Date.now(),
-            reply: function (response: { assistant?: AssistantResponse; task?: TaskResponse; }): void {
-                throw new Error('Function not implemented.');
+    const msg = new HumanMessage({
+        content: [
+            {
+                type: "image_url",
+                image_url: {
+                    url: "https://media.discordapp.net/attachments/1105093381085995058/1396773544259752059/20250719_115303.jpg?ex=687f4e3b&is=687dfcbb&hm=eea6432cf14b4f77e14d9c95f228cb51bdb5f0b82e8a623563727cea86ee221a&=&format=webp&width=411&height=547"
+                }
             }
-        }
-    ])
-    console.log(n)
+        ]
+    })
+
+    let res = await ChatPromptTemplate.fromMessages([
+        msg,
+        HumanMessagePromptTemplate.fromTemplate("輸入: \n{input}")
+    ]).pipe(await ComponentContainer.getLLMManager().create("test", {
+        model: "gpt-4o"
+    })).invoke({
+        input: "描述這張圖片。"
+    })
+
+    console.log(res)
+
     // const results = await Vectra.getInstance().queryItems<GraphNodeMetadata>(vector, 5, {
     //     // @ts-ignore
     //     "namespace": { "$eq": NODES_PATH },
