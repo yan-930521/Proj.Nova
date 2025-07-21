@@ -82,7 +82,6 @@ export class Reorganizer {
 
             MemorySystemLogger.debug(`Partitioned into ${partitionedGroups.length} clusters.`);
 
-
             for (const clusterNodes of partitionedGroups) {
                 await this.processClusteAndWrite(clusterNodes, scope, localTreeThreshold, minClusterSize)
             }
@@ -96,15 +95,19 @@ export class Reorganizer {
     }
 
     getOptimizationCandidates(scope: NodeMemoryType): MemoryNode[] {
+        const nodeManager = this.nodeManager;
         function* findOptimizationCandidates(_nodes: Map<string, MemoryNode>, _scope: NodeMemoryType) {
             for (const [id, m] of _nodes.entries()) {
                 if (
                     m.metadata.memory_type === _scope &&
                     m.metadata.status === 'activated'
                 ) {
-                    const isIsolated = !m.parentId && (!m.childrenIds || m.childrenIds.length === 0);
+                    const children = nodeManager.getChildrenIds(id);
+                    const parents = nodeManager.getParents(id);
+                    
+                    const isIsolated = parents.length === 0 && children.length === 0;
                     const isEmptyBackground = !m.metadata.background || m.metadata.background === '';
-                    const hasExactlyOneChild = m.childrenIds && m.childrenIds.length === 1;
+                    const hasExactlyOneChild = children.length === 1;
 
                     if (isIsolated || isEmptyBackground || hasExactlyOneChild) {
                         yield id;

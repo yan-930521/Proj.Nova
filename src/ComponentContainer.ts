@@ -68,4 +68,8 @@ export class ComponentContainer {
     static getMemoryReader(): MemoryReader {
         return this.components["MemoryReader"] as unknown as MemoryReader;
     }
+
+    static getMemoryCube(): MemoryCube {
+        return this.components["MemoryCube"] as unknown as MemoryCube;
+    }
 }

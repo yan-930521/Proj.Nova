@@ -54,8 +54,13 @@ export class MemoryReader extends BaseSuperVisor {
 
         MemorySystemLogger.debug("Extract memory from messages");
 
-        const conversation = messages.map((m) => {
-            return `[${new Date(m.timestamp).toLocaleString()}] ${m.type}: ${m.content}`
+        // 過濾標籤
+        const conversation = messages.filter((m) => !(
+            m.content.startsWith("[memory]") ||
+            m.content.startsWith("[information]") || 
+            m.content.startsWith("[task]")
+        )).map((m) => {
+            return `[${new Date(m.timestamp).toLocaleString()}] [${m.type}]: ${m.content.replace("[response]:", "").trim()}`
         }).join("\n");
 
         session.context.recentMessages = [];

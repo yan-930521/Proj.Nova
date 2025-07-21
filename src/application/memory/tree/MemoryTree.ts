@@ -62,6 +62,9 @@ export class MemoryTree {
         }
 
         // Step 2: remove oldest memory
+        this.removeOldestMemory("WorkingMemory");
+        this.removeOldestMemory("LongTermMemory");
+        this.removeOldestMemory("UserMemory");
 
         this.nodeManager.refreshMemorySize();
     }
@@ -74,6 +77,20 @@ export class MemoryTree {
         if (["LongTermMemory", "UserMemory"].includes(memory.metadata.memory_type)) {
             await this.addGraphMemory(memory, memory.metadata.memory_type);
         }
+    }
+
+    async getWorkingMemory(session: Session) {
+        const userId = session.user.id;
+        const workingMemories = Array.from(this.nodeManager
+            .getAllNodes()
+            .values())
+            .filter(
+                (node) =>
+                    node.metadata.memory_type === "WorkingMemory" &&
+                    node.metadata.user_id === userId &&
+                    node.metadata.status === "activated"
+            );
+        return workingMemories;
     }
 
     /**
@@ -95,7 +112,7 @@ export class MemoryTree {
 
         const results = (await this.searchByMetadata(memory.metadata.embedding, 5, {
             user_id: memory.metadata.user_id,
-            memory_type: memory.metadata.memory_type,
+            memory_type: memory_type,
             status: "activated"
         })).filter((r) => r.score >= this.similarThreshold);
 
@@ -116,7 +133,7 @@ export class MemoryTree {
         }
     }
 
-   async merge(sourceNode: MemoryNode, targetNode: MemoryNode) {
+    async merge(sourceNode: MemoryNode, targetNode: MemoryNode) {
         const originalId = targetNode.id;
 
         const mergedText = `${targetNode.memory}\n⟵MERGED⟶\n${sourceNode.memory}`;
@@ -171,9 +188,22 @@ export class MemoryTree {
         return Array.from(new Set([...a, ...b]));
     }
 
-
-    removeOldestMemory(memort_type: NodeMemoryType, keep: number) {
-
+    removeOldestMemory(memort_type: NodeMemoryType) {
+        const keep = this.nodeManager.memorySize[memort_type]; // 10
+        Array.from(this.nodeManager.getAllNodes().values())
+            .filter((n) => n.metadata.memory_type == "WorkingMemory")
+            .sort((a, b) => {
+                let tb = b.metadata.updated_at ?? b.metadata.created_at ?? 0;
+                let ta = a.metadata.updated_at ?? a.metadata.created_at ?? 0;
+                return tb - ta;// 由近排序到遠
+            })
+            .forEach((n, i) => {
+                // 0 - 9
+                if (i >= keep) {
+                    // all delete
+                    this.nodeManager.deleteNode(n);
+                }
+            });
     }
 
     async search(
@@ -187,7 +217,7 @@ export class MemoryTree {
             user_id: session.user.id,
             status: "activated",
             memory_type: ['LongTermMemory', 'UserMemory']
-        });// search pudding
+        });
 
         const visited = new Set<string>();
         const nodes: MemoryNode[] = [];
@@ -211,7 +241,7 @@ export class MemoryTree {
             if (node) recursiveSearch(node);
         });
 
-        return this.nodeManager.toString(nodes, session, true);
+        return nodes;
     }
 
     async searchByMetadata(vector: number[], k: number = 3, metadata: Partial<NodeMemoryMetadata> | Record<string, any> = {}): Promise<QueryResult<GraphNodeMetadata>[]> {

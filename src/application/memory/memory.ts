@@ -136,6 +136,14 @@ export const MEMORY_EXTRACTOR_TYPE = z.object({
 
 export const REORGANIZE_PROMPT = `You are a memory clustering and summarization expert.
 
+⚠️ IMPORTANT LANGUAGE POLICY:
+All output must match the language and writing system (Traditional vs Simplified) of the input conversation. For example:
+- If the conversation is in Traditional Chinese, all output must be in Traditional Chinese.
+- If the conversation is in Simplified Chinese, all output must be in Simplified Chinese.
+- If the conversation is in English, output in English.
+Never default to English unless the conversation is in English.
+Never convert between Traditional and Simplified Chinese — preserve the original writing system.
+
 Given the following child memory items:
 
 Keys:

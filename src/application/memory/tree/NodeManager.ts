@@ -45,6 +45,25 @@ export class NodeManager {
         return this.edges.get(memoryId);
     }
 
+    getParents(id: string): string[] {
+        const parents: string[] = [];
+        for (const [fromId, edgeList] of this.edges.entries()) {
+            for (const edge of edgeList) {
+                if (edge.to === id && this.nodes.has(fromId)) {
+                    parents.push(fromId);
+                }
+            }
+        }
+        return parents;
+    };
+
+    // 獲取子節點（基於所有邊）
+    getChildrenIds(id: string): string[] {
+        return (this.getEdges(id) ?? [])
+            .filter(edge => this.nodes.has(edge.to))
+            .map(edge => edge.to);
+    };
+
     getAllEdges() {
         return this.edges;
     }
@@ -56,7 +75,7 @@ export class NodeManager {
         let nodes = _nodes ?? Array.from(this.nodes.values());
         if (session) nodes = nodes.filter((n) => {
             let r = true;
-            if (n.metadata.user_id !== session.user.id) r = false;
+            if (n.metadata.user_id && n.metadata.user_id !== session.user.id) r = false;
             if (n.metadata.status !== "activated") r = false;
             if (n.metadata.memory_type == 'WorkingMemory') r = false;
             // if (n.metadata.session_id) {
@@ -76,13 +95,14 @@ export class NodeManager {
 
             const node = this.getNode(id);
             if (!node ||
-                (session && node.metadata.user_id !== session.user.id) ||
+                (session && node.metadata.user_id && node.metadata.user_id !== session.user.id) ||
                 node.metadata.memory_type == 'WorkingMemory' ||
                 node.metadata.status != "activated"
             ) return;
 
             lines.push(`${'     '.repeat(depth * 2)} - [ ${node.metadata.key ?? node.memory ?? node.id} ]`);
-            node.childrenIds.forEach((childId) => printNode(childId, depth + 1));
+
+            this.getChildrenIds(id).forEach(childId => printNode(childId, depth + 1));
         };
 
         const printNodeDetail = (id: string, depth: number) => {
@@ -100,8 +120,10 @@ export class NodeManager {
 
             const memory = node.memory;
             lines.push(`${indent + padding}  memory: ${memory}`);
-            
-            if (node.childrenIds.length == 0) {
+
+            const childrenIds = this.getChildrenIds(id);
+
+            if (childrenIds.length == 0) {
                 const status = node.metadata.status ?? 'unknown';
                 const type = node.metadata.type ?? 'unknown';
                 const memoryTime = node.metadata.memory_time ?? 'unknown';
@@ -116,7 +138,7 @@ export class NodeManager {
                     lines.push(`${indent + padding}  background: ${node.metadata.background}`);
                 }
             } else {
-                node.childrenIds.forEach((childId) => printNodeDetail(childId, depth + 1));
+                childrenIds.forEach((childId) => printNodeDetail(childId, depth + 1));
             }
 
         };
@@ -126,18 +148,14 @@ export class NodeManager {
         // 找出局部根節點（沒有被其他節點指向的節點）
         const childIds = new Set<string>();
 
-        Array.from(this.edges.values()).forEach((edgeList) => {
-            for (const edge of edgeList) {
+        // 收集所有被任何邊指向的節點
+        Array.from(this.edges.values()).forEach(edgeList => {
+            edgeList.forEach(edge => {
                 if (idList.includes(edge.from) && idList.includes(edge.to)) {
-                    // 這個邊屬於這個節點
-                    if (edge.type == 'PARENT') {
-                        childIds.add(edge.to);
-                    }
+                    childIds.add(edge.to);
                 }
-            }
-        })
-
-        // 或許可以直接比較是否有parentId?
+            });
+        });
 
         let rootCandidates = nodes.filter((n) => !childIds.has(n.id)).sort((a, b) => {
             let tb = b.metadata.updated_at ?? b.metadata.created_at ?? 0;
@@ -195,6 +213,15 @@ export class NodeManager {
     }
 
     saveNode = this.addNode;
+
+    async deleteNode(memoryNode: MemoryNode) {
+        memoryNode.metadata.status = 'deleted';
+        await Vectra.getInstance().upsertItem<GraphNodeMetadata>({
+            id: NODES_PATH.replace("{node_id}", memoryNode.id),
+            vector: memoryNode.metadata.embedding,
+            metadata: this.createGraphNodeMetadata(memoryNode)
+        });
+    }
 
     addEdge(edge: MemoryEdge) {
         let entry = this.edges.get(edge.from);

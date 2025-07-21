@@ -9,7 +9,6 @@ import {
 import { AssistantResponse } from './application/assistant/Assistant';
 import { MemoryCube } from './application/memory/MemoryCube';
 import { MemoryReader } from './application/memory/MemoryReader';
-import { MemoryTree } from './application/memory/tree/MemoryTree';
 import { Nova } from './application/Nova';
 import { Session } from './application/SessionContext';
 import { LATS } from './application/task/lats/LATS';
@@ -39,6 +38,7 @@ const client = new Client({
         GatewayIntentBits.MessageContent
     ]
 });
+
 const getChannel = (client: Client, id: string): TextChannel | undefined => {
     return client.channels.cache.get(id) as TextChannel;
 }
@@ -53,7 +53,8 @@ ComponentContainer.initialize([
     new Nova(),
     new ContextManager(),
     new LATS(),
-    new MemoryReader()
+    new MemoryReader(),
+    new MemoryCube()
 ]).then(async () => {
     // 初始化DB
     LevelDB.initialize(
@@ -68,8 +69,7 @@ ComponentContainer.initialize([
 
     await checkVectra();
 
-    const cube = new MemoryCube();
-    await cube.loadCube(ComponentContainer.getConfig().defaultCharacter);
+    const cube = ComponentContainer.getMemoryCube();
 
     const cmdParser = async (msg: Message, session: Session, input: string) => {
         const cmd = input.toLowerCase();
@@ -92,19 +92,20 @@ ComponentContainer.initialize([
             });
         }
         if (cmd == "getmem") {
-            let str = "Memory Tree:\n" + cube.toString(session);
+            let str = "Memory Tree:\n" + cube.toString(null, session);
             reply("```" + str + "```");
             return true;
         } else if (cmd == "getdmem") {
-            let str = "Memory Tree:\n" + cube.toDetailString(session);
+            let str = "Memory Tree:\n" + cube.toDetailString(null, session);
             reply("```" + str + "```");
             return true;
         } else if (cmd.startsWith("search")) {
-            session = await ComponentContainer.getNova().SessionContext.get(session.user.id) as Session;
+            session = ComponentContainer.getNova().SessionContext.get(session.user.id) as Session;
             if (!session) return;
             let querys = input.split(" ");
             querys.shift();
             let result = await cube.search(querys.join(" "), 3, session);
+            cube.toDetailString(result, session);
             let str = "Search Tree:\n" + result;
             reply("```" + str + "```");
             return true;
@@ -166,7 +167,8 @@ ComponentContainer.initialize([
                 username,
                 id: userId
             },
-            createdTimestamp
+            createdTimestamp,
+            embeds
         } = msg;
 
         const nickname = msg.author.globalName || username;
@@ -180,13 +182,16 @@ ComponentContainer.initialize([
 
         // console.log(user)
 
-        let ct = cleanMsg(content); //.split(" ").join("，");
-
+        // let ct = cleanMsg(content); //.split(" ").join("，");
+        let ct = content; //.split(" ").join("，");
+        // read msg from self like ai
+        if(ct == "" && embeds.length > 0 && embeds[0].description !== null ) {
+            ct = embeds[0].description;
+        }
 
         if (ct != "") {
             try {
-                const session = await ComponentContainer.getNova().SessionContext.ensureSession(user.id)
-                session.context.memories = cube.getMemory(session).split("\n");
+                const session = await ComponentContainer.getNova().SessionContext.ensureSession(user.id);
 
                 let result = await cmdParser(msg, session, ct);
                 if (result) return;
@@ -251,40 +256,4 @@ ComponentContainer.initialize([
             }
         }
     });
-
-    // const lats = new LATS();
-
-    // const agent = new TaskOrchestrator({});
-
-    // agent.init().then(async () => {
-    //     const rl = createInterface({
-    //         input: process.stdin,
-    //         output: process.stdout,
-    //     });
-
-    //     // const user = new User("admin", "櫻2");
-    //     const user = await LevelDBUserRepository.getInstance().findById("admin");
-    //     if (!user) return;
-
-    //     const loop = () => {
-    //         rl.question('> ', async (question) => {
-    //             let task = new Task({
-    //                 author: user,
-    //                 userInput: question
-    //             })
-    //             task.on("response", ({ task, character }) => {
-    //                 if (task) {
-    //                     console.log("get task", task);
-    //                 }
-    //                 if (character) {
-    //                     console.log("get c", character);
-    //                 }
-    //             });
-    //             agent.processInput(task);
-    //             true;
-    //         });
-    //     }
-
-    //     true;
-    // });
 });

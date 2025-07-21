@@ -5,6 +5,7 @@
 import { createInterface } from 'readline';
 
 import { AssistantResponse } from '../application/assistant/Assistant';
+import { MemorySystemLogger } from '../application/memory/base/Memory';
 import { MemoryCube } from '../application/memory/MemoryCube';
 import { MemoryReader } from '../application/memory/MemoryReader';
 import { MemoryTree } from '../application/memory/tree/MemoryTree';
@@ -35,7 +36,8 @@ ComponentContainer.initialize([
     new Nova(),
     new ContextManager(),
     new LATS(),
-    new MemoryReader()
+    new MemoryReader(),
+    new MemoryCube()
 ]).then(async () => {
     // 初始化DB
     LevelDB.initialize(
@@ -55,8 +57,7 @@ ComponentContainer.initialize([
         output: process.stdout,
     });
 
-    const cube = new MemoryCube();
-    await cube.loadCube(ComponentContainer.getConfig().defaultCharacter);
+    const cube = ComponentContainer.getMemoryCube();
 
     let user = await LevelDBUserRepository.getInstance().findById("823885929830940682");
     if (!user) {
@@ -69,24 +70,28 @@ ComponentContainer.initialize([
 
     const loop = () => {
         rl.question('', async (input) => {
-            session.context.memories = cube.getMemory(session).split("\n");
             const cmd = input.toLowerCase();
             if (cmd == "exit") {
                 return;
+            } else if (cmd == "history") {
+                MemorySystemLogger.debug(session.context.messages.concat(session.context.inputMessages).map((m) => m.content).join("\n"))
+                return loop();
             } else if (cmd == "getmem") {
-                cube.toString(session);
+                cube.toString(null, session);
                 return loop();
             } else if (cmd == "getdmem") {
-                cube.toDetailString(session)
+                cube.toDetailString(null, session);
                 return loop();
             } else if (cmd.startsWith("search")) {
                 let querys = input.split(" ");
                 querys.shift();
                 let result = await cube.search(querys.join(" "), 3, session);
+                
+                cube.toDetailString(result, session);
                 return loop();
             } else if (cmd == "optimize") {
                 await cube.treeOptimizeLoop();
-                return true;
+                return loop();
             } else if (cmd.startsWith("load")) {
                 let querys = input.split(" ");
                 querys.shift();
@@ -96,6 +101,11 @@ ComponentContainer.initialize([
                 let querys = input.split(" ");
                 querys.shift();
                 await cube.saveCube(querys.join(" "))
+                return loop();
+            } else if (cmd == "recreate") {
+                MemorySystemLogger.debug("Recreate Vector Database Start");
+                await cube.recreateVectorDatabase();
+                MemorySystemLogger.debug("Recreate Vector Database Success");
                 return loop();
             } else if (cmd == "stop_task") {
                 let list = await LevelDBTaskRepository.getInstance().findByMetadata({

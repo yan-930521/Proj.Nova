@@ -3,27 +3,32 @@
 
 import { ComponentContainer } from '../../ComponentContainer';
 import { JsonCubeLoader } from '../../frameworks/json/JsonCubeLoader';
+import { Vectra } from '../../frameworks/vectra/vectra';
+import { BaseComponent } from '../../libs/base/BaseComponent';
 import { getUid } from '../../libs/utils/string';
 import { Session } from '../SessionContext';
 import { MemorySystemLogger } from './base/Memory';
-import { MemoryTree, MemoryTreeData } from './tree/MemoryTree';
+import { MemoryNode } from './tree/MemoryNode';
+import { GraphNodeMetadata, MemoryTree, MemoryTreeData, NODES_PATH } from './tree/MemoryTree';
 
 export interface MemoryCubeData {
     id: string
     memoryTree: MemoryTreeData
 }
 
-export class MemoryCube {
+export class MemoryCube extends BaseComponent {
     public id: string;
-    public memoryTree: MemoryTree = new MemoryTree();
+
+    // @ts-ignore
+    public memoryTree: MemoryTree;
     public canOptimize: boolean = false;
     public optimizeTimer?: NodeJS.Timeout;
 
     constructor(id?: string) {
+        super({
+            name: "MemoryCube"
+        });
         this.id = id ?? this.createId();
-        this.optimizeTimer = setInterval(() => {
-            this.treeOptimizeLoop();
-        }, ComponentContainer.getConfig().optimizationTime);
     }
 
     /**
@@ -35,6 +40,14 @@ export class MemoryCube {
         return "MemoryCube-" + baseId;
     }
 
+    protected async initLogic(): Promise<void> {
+        this.memoryTree = new MemoryTree();
+        this.optimizeTimer = setInterval(() => {
+            this.treeOptimizeLoop();
+        }, ComponentContainer.getConfig().optimizationTime);
+
+        await this.loadCube(ComponentContainer.getConfig().defaultCharacter);
+    }
 
     async treeOptimizeLoop() {
         await this.memoryTree?.reorganizer.treeOptimize("LongTermMemory", 5, 3, 10);
@@ -44,8 +57,7 @@ export class MemoryCube {
 
     async search(query: string, topk: number = 3, session: Session) {
         let result = await this.memoryTree?.search(query, topk, session);
-        if (result) MemorySystemLogger.debug("Search Tree:\n" + result);
-        return result ?? "";
+        return result ?? [];
     }
 
     getMemory(session: Session) {
@@ -53,14 +65,18 @@ export class MemoryCube {
         return result;
     }
 
-    toString(session: Session) {
-        let result = this.memoryTree?.nodeManager.toString(null, session, false);
+    getWorkingMemory(session: Session) {
+        return this.memoryTree.getWorkingMemory(session);
+    }
+
+    toString(nodes: MemoryNode[] | null, session: Session, topK?: number) {
+        let result = this.memoryTree?.nodeManager.toString(nodes, session, false, topK);
         MemorySystemLogger.debug("Memory Tree:\n" + result);
         return result
     }
 
-    toDetailString(session: Session) {
-        let result = this.memoryTree?.nodeManager.toString(null, session, true);
+    toDetailString(nodes: MemoryNode[] | null, session: Session, topK?: number) {
+        let result = this.memoryTree?.nodeManager.toString(nodes, session, true, topK);
         MemorySystemLogger.debug("Memory Tree:\n" + result);
         return result
     }
@@ -102,6 +118,16 @@ export class MemoryCube {
         } catch (err) {
             MemorySystemLogger.debug("Load Graph Failed: " + id);
             return false;
+        }
+    }
+
+    async recreateVectorDatabase() {
+        for (const node of this.memoryTree.nodeManager.getAllNodes().values()) {
+            await Vectra.getInstance().upsertItem<GraphNodeMetadata>({
+                id: NODES_PATH.replace("{node_id}", node.id),
+                vector: node.metadata.embedding,
+                metadata: this.memoryTree.nodeManager.createGraphNodeMetadata(node)
+            });
         }
     }
 

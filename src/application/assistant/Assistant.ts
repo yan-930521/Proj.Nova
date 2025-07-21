@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
+import { TavilySearchResults } from '@langchain/community/tools/tavily_search';
+import { AIMessage, BaseMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
 import {
     ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate
 } from '@langchain/core/prompts';
@@ -36,10 +37,6 @@ export const AssistantState = Annotation.Root({
     }),
 
     session: Annotation<Session>,
-    call_task: Annotation<boolean>({
-        reducer: (_, call_task) => call_task,
-        default: () => false
-    }),
 
     /**
      * 用於暫存回應
@@ -74,13 +71,42 @@ export const AssistantState = Annotation.Root({
     })
 });
 
+export const RouterTool = new DynamicStructuredTool({
+    name: "router_tool",
+    description: "根據使用者輸入，自動決定是否需要一般對話、資訊檢索、任務建立、深度推理。",
+    schema: z.object({
+        next: z.enum([
+            "general_chat",
+            "retrieve_information",
+            "create_task",
+            "deep_think"
+        ])
+    }),
+    func: async (input) => {
+        const data = JSON.stringify(input, null, 4);
+        return data;
+    }
+});
+
+export const RetrieveTool = new DynamicStructuredTool({
+    name: "retrieve_tool",
+    description: "Retrieves relevant information from internal memory or the web based on a query string.",
+    schema: z.object({
+        query: z.string().describe(`The query string to search for relevant information in memory or on the web.`)
+    }),
+    func: async (input) => {
+        const data = JSON.stringify(input, null, 4);
+        return data;
+    }
+});
+
+
+
 export const ReasoningOutputTool = new DynamicStructuredTool({
     name: "reasoning_tool",
-    description: "從第一人稱視角思考目前情境，並判斷是否為任務導向的請求。",
+    description: "從第一人稱視角深入思考目前情境，產生連貫且具人性的內在推理過程。",
     schema: z.object({
-        reasoning: z.string()
-            .describe("請從第一人稱視角，模擬一位普通人接收到輸入訊息後的內在推理過程，思考對方的意圖是否涉及具體任務。如果你發現這個請求超出你個人能處理的範圍，你不需要執行該任務，只需要判斷是否應該轉交給 TaskOrchestrator。請自然地描述這段判斷與思考，而不是以系統限制（例如「我無法讀檔案」）為理由推託。這段推理應具有邏輯性與人類的思考節奏，可以使用內心自語風格表達。"),
-        call_task: z.boolean().describe("是否為任務。")
+        reasoning: z.string().describe(`請從第一人稱視角，模擬一位普通人在現實生活中接收到輸入訊息時，所展開的完整內在思考過程。這段推理應自然且流暢，像是內心自語的形式，反映出一個人試圖理解對方語氣、動機、情緒與隱含訊息時會經歷的認知歷程。\n\n請務必讓推理內容具備下列特徵：\n1. **逐步展開的思緒**，包含不確定、懷疑、自我修正與嘗試理解對方的過程。\n2. **情感與直覺反應**，如困惑、懷疑、興奮、懷念等，而不只是理性判斷。\n3. **與自身經驗連結**，例如過去的記憶、情緒、感覺、習慣或價值觀。\n4. **篇幅足夠長（不少於 300 字）**，避免簡化為單句回應或明確結論。\n5. **避免任何工具決策或任務判斷**，這段推理並不涉及任何是否要執行任務或工具呼叫的選擇，它只是單純地模擬「如果我是對方，會怎麼思考」。\n\n這段推理應該要讓閱讀者感受到，這是一個活生生的人的腦中活動，而不是程式化的輸出。`)
     }),
     func: async (input) => {
         const data = JSON.stringify(input, null, 4);
@@ -101,9 +127,9 @@ export const ResponseOutputTool = new DynamicStructuredTool({
     }
 });
 
-export const CallTaskOrchestrator = new DynamicStructuredTool({
-    name: "call_task_orchestrator",
-    description: "分配任務給任務處理器處理。",
+export const CreateTask = new DynamicStructuredTool({
+    name: "create_task",
+    description: "創建新任務",
     schema: z.object({
         task: z.string()
             .describe("任務的詳細描述、需求、目標。")
@@ -121,9 +147,15 @@ export class Assistant extends BaseSuperVisor {
     AgentState = AssistantState;
 
     static readonly REASONING_MODE = "REASONING_MODE";
+    static readonly RETRIEVE_MODE = "RETRIEVE_MODE";
     static readonly GENERAL_MODE = "GENERAL_MODE";
     static readonly DIARY_MODE = "DIARY_MODE";
-    static readonly TOOL_MODE = "DIARY_MODE";
+    static readonly TASK_MODE = "TASK_MODE";
+
+    // @ts-ignore
+    tools: {
+        tavilyTool: TavilySearchResults;
+    }
 
     constructor() {
         super({
@@ -139,6 +171,14 @@ export class Assistant extends BaseSuperVisor {
                     maxTokens: 1024,
                     model: "gpt-4.1",
                 });
+
+                this.tools = {
+                    tavilyTool: new TavilySearchResults({
+                        maxResults: 4
+                    }),
+
+                }
+
 
                 this._llm = ComponentContainer.getLLMManager().getLLM();
 
@@ -183,9 +223,11 @@ export class Assistant extends BaseSuperVisor {
      * 如果訊息太多，存檔，否則終止對話
      */
     shouldContinue(state: typeof this.AgentState.State): string | typeof END {
-        const messages = state.messages;
+        const { session } = state;
+
+        const messages = session.context.messages;
         // 簡單說就是寫日記
-        if (messages.length > 19) {
+        if (messages.length > 20) {
             return Assistant.DIARY_MODE;
         }
 
@@ -195,10 +237,37 @@ export class Assistant extends BaseSuperVisor {
     /**
      * 決定是否思考 / 用於快速響應
      */
-    modeRouter(state: typeof this.AgentState.State): string | typeof END {
+    async modeRouter(state: typeof this.AgentState.State): Promise<string> {
         this.logger.debug("Mode routing...");
-        if (state.input.length <= 15) return Assistant.GENERAL_MODE;
-        return Assistant.REASONING_MODE;
+        const { messages, character, input, session } = state;
+
+        const llm = ComponentContainer.getLLMManager().getLLM();
+
+        const context = await ComponentContainer.getContextManager().getContext(session);
+
+        const result = await this.prompt.pipe(
+            llm.withStructuredOutput(RouterTool.schema)).invoke(
+                Assistant.formatCharacter({
+                    description: character.description,
+                    personality: character.personality,
+                    user: session.user,
+                    rules: character.rules,
+                    context,
+                    messages,
+                    input,
+                }, character)
+            );
+
+        switch (result.next) {
+            case "create_task":
+                return Assistant.TASK_MODE;
+            case "deep_think":
+                return Assistant.REASONING_MODE;
+            case "retrieve_information":
+                return Assistant.RETRIEVE_MODE;
+            default:
+                return Assistant.GENERAL_MODE;
+        }
     }
 
     async genReasoning(state: typeof this.AgentState.State) {
@@ -211,22 +280,19 @@ export class Assistant extends BaseSuperVisor {
         const context = await ComponentContainer.getContextManager().getContext(session);
 
         const result = await this.prompt.pipe(
-            llm.bindTools([ReasoningOutputTool], { tool_choice: ReasoningOutputTool.name })
-                .pipe(JSONOutputToolsParser)).invoke(
-                    Assistant.formatCharacter({
-                        description: character.description,
-                        personality: character.personality,
-                        user: session.user,
-                        rules: character.rules,
-                        context,
-                        messages,
-                        input,
-                    }, character)
-                );
+            llm.withStructuredOutput(ReasoningOutputTool.schema)).invoke(
+                Assistant.formatCharacter({
+                    description: character.description,
+                    personality: character.personality,
+                    user: session.user,
+                    rules: character.rules,
+                    context,
+                    messages,
+                    input,
+                }, character)
+            );
 
-        let reasoning = result[0].args.reasoning;
-        let call_task = result[0].args.call_task as unknown as boolean ?? false;
-
+        let reasoning = result.reasoning;
         let wordsCount = reasoning.length;
         this.logger.debug(`[reasoning]: ${reasoning}`);
 
@@ -238,42 +304,93 @@ export class Assistant extends BaseSuperVisor {
             reply: () => { }
         });
 
-
-        if (call_task) {
-            return {
-                messages: [
-                    new HumanMessage({
-                        id: getUid(),
-                        content: input
-                    })
-                ],
-                call_task,
-                response_metadata: {
-                    reasoning: reasoning,
-                    response: "### Calling TaskOrchestrator...",
-                    wordsCount: wordsCount ?? 0
-                },
-                session
-            }
-        }
-
         return {
             messages: [
-                new HumanMessage({
-                    id: getUid(),
-                    content: input
-                }),
                 new AIMessage({
                     id: getUid(),
                     content: `[reasoning]: ${reasoning}`
                 })
             ],
-            call_task,
             response_metadata: {
                 reasoning: reasoning ?? "",
                 response: "",
                 wordsCount: wordsCount ?? 0
             },
+            session
+        };
+    }
+
+    async retrieve(state: typeof this.AgentState.State) {
+        this.logger.debug("Retrieve Information...");
+
+        const { messages, input, session, character } = state;
+
+        const llm = ComponentContainer.getLLMManager().getLLM(Assistant.REASONING_MODE);
+
+        const context = await ComponentContainer.getContextManager().getContext(session);
+
+        const result = await this.prompt.pipe(
+            llm.withStructuredOutput(RetrieveTool.schema)).invoke(
+                Assistant.formatCharacter({
+                    description: character.description,
+                    personality: character.personality,
+                    user: session.user,
+                    rules: character.rules,
+                    context,
+                    messages,
+                    input,
+                }, character)
+            );
+
+        // 從記憶庫檢索相關記憶
+        const memoryCube = ComponentContainer.getMemoryCube();
+
+        // 將檢索到的記憶組成 context
+        const memoryPromise = memoryCube.search(result.query, 5, session).then((memories) => {
+            return memories.length > 0
+                ? memories.map((memory, idx) => `(${idx + 1}) ${memory.memory}`).join('\n')
+                : "（沒有檢索到相關記憶）";
+        })
+
+        // 從網路檢索資料
+        const tavilyPromise: Promise<ToolMessage> = this.tools.tavilyTool.invoke(result.query);
+
+        const [memoryContext, tavilyResponse] = await Promise.all([
+            memoryPromise,
+            tavilyPromise
+        ]);
+
+        // wikiTool: WikipediaQueryRun;
+        // braveTool: BraveSearch;
+
+        console.log(tavilyResponse)
+
+        session.context.inputMessages.push({
+            content: `[memory]:\n${memoryContext}`,
+            type: 'assistant',
+            user: session.user,
+            timestamp: Date.now(),
+            reply: () => { }
+        });
+        session.context.inputMessages.push({
+            content: `[information]:\n${tavilyResponse.content}`,
+            type: 'assistant',
+            user: session.user,
+            timestamp: Date.now(),
+            reply: () => { }
+        });
+
+        return {
+            messages: [
+                new AIMessage({
+                    id: getUid(),
+                    content: `[memory]:\n${memoryContext}`
+                }),
+                new AIMessage({
+                    id: getUid(),
+                    content: `[information]:\n${tavilyResponse.content}`
+                })
+            ],
             session
         };
 
@@ -282,70 +399,52 @@ export class Assistant extends BaseSuperVisor {
     async genResponse(state: typeof this.AgentState.State) {
         this.logger.debug("Generating Response...");
 
-        const { character, input, session, response_metadata, call_task } = state;
+        const { character, input, session, response_metadata } = state;
 
         const context = await ComponentContainer.getContextManager().getContext(session);
 
-        let newState: Partial<typeof this.AgentState.State> = {}
+        const result = await this.prompt.pipe(
+            this.llm.withStructuredOutput(ResponseOutputTool.schema)).invoke(
+                Assistant.formatCharacter({
+                    description: character.description,
+                    personality: character.personality,
+                    user: session.user,
+                    rules: character.rules,
+                    context,
+                    messages: state.messages,
+                    input,
+                }, character)
+            )
 
-        if (call_task) {
-            newState = await this.callTaskOrchestrator(state);
-            state.messages = state.messages.concat(newState.messages ?? []);
-            state.response_metadata = newState.response_metadata ?? state.response_metadata;
+        let response = result.response;
+        let wordsCount = response.length;
+        this.logger.debug(`[response]: ${response}`);
 
-            return {
-                ...state,
-                response_metadata: {
-                    reasoning: response_metadata.reasoning ?? "",
-                    response: response_metadata.response ?? "",
-                    wordsCount: response_metadata.wordsCount
-                }
+        session.context.inputMessages.push({
+            content: `[response]: ${response}`,
+            type: 'assistant',
+            user: session.user,
+            timestamp: Date.now(),
+            reply: () => { }
+        });
+
+        return {
+            ...state,
+            messages: [
+                new AIMessage({
+                    id: getUid(),
+                    content: `[response]: ${response}`
+                })
+            ],
+            response_metadata: {
+                reasoning: response_metadata.reasoning ?? "",
+                response: response ?? "",
+                wordsCount: response_metadata.wordsCount + (wordsCount ?? 0)
             }
-        } else {
-            const result = await this.prompt.pipe(
-                this.llm.bindTools([ResponseOutputTool], { tool_choice: ResponseOutputTool.name })
-                    .pipe(JSONOutputToolsParser)).invoke(
-                        Assistant.formatCharacter({
-                            description: character.description,
-                            personality: character.personality,
-                            user: session.user,
-                            rules: character.rules,
-                            context,
-                            messages: state.messages,
-                            input,
-                        }, character)
-                    )
-
-            let response = result[0].args.response;
-            let wordsCount = response.length;
-            this.logger.debug(`[response]: ${response}`);
-
-            session.context.inputMessages.push({
-                content: `[response]: ${response}`,
-                type: 'assistant',
-                user: session.user,
-                timestamp: Date.now(),
-                reply: () => { }
-            });
-
-            return {
-                ...state,
-                messages: [
-                    new AIMessage({
-                        id: getUid(),
-                        content: `[response]: ${response}`
-                    })
-                ],
-                response_metadata: {
-                    reasoning: response_metadata.reasoning ?? "",
-                    response: response ?? "",
-                    wordsCount: response_metadata.wordsCount + (wordsCount ?? 0)
-                }
-            };
-        }
+        };
     }
 
-    async callTaskOrchestrator(state: typeof this.AgentState.State) {
+    async genTask(state: typeof this.AgentState.State) {
         this.logger.debug("Calling TaskOrchestrator...");
 
         const { messages, character, input, session, response_metadata } = state;
@@ -356,7 +455,7 @@ export class Assistant extends BaseSuperVisor {
         const llm = ComponentContainer.getLLMManager().getLLM();
 
         const result = await this.prompt.pipe(
-            llm.bindTools([CallTaskOrchestrator], { tool_choice: CallTaskOrchestrator.name }).pipe(JSONOutputToolsParser)
+            llm.bindTools([CreateTask], { tool_choice: CreateTask.name }).pipe(JSONOutputToolsParser)
         ).invoke(
             Assistant.formatCharacter({
                 description: character.description,
@@ -374,19 +473,12 @@ export class Assistant extends BaseSuperVisor {
         let wordsCount = task_str.length;
         this.logger.debug(`[task]: ${task_str}`);
 
-        // session.context.inputMessages.push({
-        //     content: `[task]: ${task_str}`,
-        //     type: 'assistant',
-        //     user: session.user,
-        //     timestamp: Date.now(),
-        //     reply: () => { }
-        // });
-
         const task = new Task({
             user: session.user,
             userInput: input,
             description: task_str
         });
+
         setTimeout(() => task.forceExit.abort(), 60000 * 6);
         await LevelDBTaskRepository.getInstance().create(task);
         ComponentContainer.getNova().emit("taskCreate", session, task);
@@ -426,11 +518,8 @@ export class Assistant extends BaseSuperVisor {
             }, character)
         )
 
-        // 刪除8則
-        // const deleteMessages = messages.slice(0, -8).map((m: HumanMessage) => new RemoveMessage({ id: m.id as string }));
-        // if (typeof response.content !== "string") {
-        //     throw new Error("Expected a string response from the model");
-        // }
+        // 保留最後10則訊息
+        session.context.messages = session.context.messages.slice(-10);
 
         // 更新日記
         await LevelDBDiaryRepository.getInstance().update(
@@ -459,6 +548,10 @@ export class Assistant extends BaseSuperVisor {
         session.context.recentMessages.push(...session.context.inputMessages);
         session.context.messages = session.context.messages.sort((a, b) => a.timestamp - b.timestamp);
         session.context.inputMessages = [];
+
+        // 更新中期記憶
+        const cube = ComponentContainer.getMemoryCube();
+        session.context.memories = (await cube.getWorkingMemory(session)).map((n) => n.memory);
 
         let reply = getReplyfromSession(session);
 
@@ -510,57 +603,6 @@ export class Assistant extends BaseSuperVisor {
         }
     }
 
-    //     async handleTaskComplete() {
-    //     ComponentContainer.getNova().on("taskComplete", async (msgs: UserMessage[]) => {
-    //         // get session
-    //         let session = this.SessionContext.get(msgs[0].authorId);
-
-    //         const defatultCharacter = await CharacterObj.getDefaultCharacter();
-
-    //         const threadConfig = {
-    //             configurable: { thread_id: session.authorId }
-    //         };
-
-    //         task.description = task.final_report != "" ? `任務: ${task.description}\n執行結果: \n${task.final_report}` : ``
-
-    //         const stream = await this.graph.stream(
-    //             {
-    //                 input: task.userInput,
-    //                 task: task,
-    //                 character: defatultCharacter,
-    //                 user: session.user
-    //             },
-    //             threadConfig
-    //         );
-
-    //         try {
-    //             let lastStep;
-    //             for await (const step of stream) {
-    //                 if (step[Assistant.GENERAL_MODE]) lastStep = step;
-    //             }
-
-    //             task.emit("response", {
-    //                 characterResponse: lastStep[this.name].response_metadata
-    //             });
-
-    //             return {
-    //                 call_task: lastStep.call_task
-    //             }
-    //         } catch (err) {
-    //             this.logger.error(String(err));
-    //             task.emit("response", {
-    //                 characterResponse: {
-    //                     reasoning: "...",
-    //                     response: "遠端伺服器錯誤，請稍後嘗試...",
-    //                     wordsCount: 0
-    //                 }
-    //             });
-    //         }
-    //     })
-
-
-    // }
-
 
     /**
      * 建立工作流程
@@ -569,13 +611,20 @@ export class Assistant extends BaseSuperVisor {
         const workflow = new StateGraph(this.AgentState);
 
         workflow
-            .addNode(Assistant.REASONING_MODE, this.genReasoning.bind(this))
             .addNode(Assistant.GENERAL_MODE, this.genResponse.bind(this))
+            .addNode(Assistant.TASK_MODE, this.genTask.bind(this))
+            .addNode(Assistant.REASONING_MODE, this.genReasoning.bind(this))
+            .addNode(Assistant.RETRIEVE_MODE, this.retrieve.bind(this))
             .addNode(Assistant.DIARY_MODE, this.writeDiary.bind(this))
             .addConditionalEdges(START, this.modeRouter.bind(this), [
-                Assistant.REASONING_MODE, Assistant.GENERAL_MODE
+                Assistant.GENERAL_MODE,
+                Assistant.TASK_MODE,
+                Assistant.REASONING_MODE,
+                Assistant.RETRIEVE_MODE,
             ])
+            .addEdge(Assistant.TASK_MODE, Assistant.GENERAL_MODE)
             .addEdge(Assistant.REASONING_MODE, Assistant.GENERAL_MODE)
+            .addEdge(Assistant.RETRIEVE_MODE, Assistant.GENERAL_MODE)
             .addConditionalEdges(Assistant.GENERAL_MODE, this.shouldContinue.bind(this), [Assistant.DIARY_MODE, END])
             .addEdge(Assistant.DIARY_MODE, END);
 
