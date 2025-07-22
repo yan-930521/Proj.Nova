@@ -120,6 +120,7 @@ Nova（控制中樞）
 - [X] 目前的記憶查詢方法還是最原始的RAG + 記憶網路，試著將原本的MemoryNote結構更新為更貼近knowledge graph的方式儲存 ( MemoryGraph )。
 - [X] 增加TaskOrchestrator的中斷機制
 - [X] 優化TaskOrchestrator的planner機制
+- [X] 增加Assistant多模態能力
 - [ ] 擴充人格模型庫，強化行為模擬的細緻程度。
 - [ ] 優化多代理協作效能，支援更大規模任務。
 - [ ] 重構 TaskOrchestrator ，`.\src\application\task\task.md` 內的task agent待實作
@@ -138,3 +139,5 @@ Nova（控制中樞）
 * 2025/07/21
   - TaskOrchestrator目前的子任務代理人是固定的，每一位代理人只能負責特定一種任務
     改成sub task agent，然後存取所有工具或許比較好
+  - 大幅改善assistant token用量
+    <image src="./asset/token.png" height="200">

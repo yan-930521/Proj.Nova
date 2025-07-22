@@ -49,6 +49,17 @@ const cleanMsg = (content: string) => {
     return content.replace(/<a?:.+?:\d{18}>|\p{Extended_Pictographic}/gu, "").replace(/<@(\d+)>/, "").trim();
 }
 
+const MAX_EMBED_DESC_LENGTH = 2000;
+
+const splitText = (text: string, maxLength: number): string[] => {
+    const chunks: string[] = [];
+    for (let i = 0; i < text.length; i += maxLength) {
+        chunks.push(text.slice(i, i + maxLength));
+    }
+    return chunks;
+};
+
+
 ComponentContainer.initialize([
     new Config(),
     new LLMManager(),
@@ -77,20 +88,22 @@ ComponentContainer.initialize([
         const cmd = input.toLowerCase();
         const reply = (description: string) => {
             const costTime = Date.now() - msg.createdTimestamp;
-            const embed = new EmbedBuilder({
-                description,
-                color: 14194326,
-                footer: {
-                    text: `cost: ${costTime / 1000} s`
-                },
-                timestamp: new Date()
-            });
 
-            msg.reply({
-                embeds: [embed],
-                allowedMentions: {
-                    repliedUser: false
-                }
+            const messageChunks = splitText(description, MAX_EMBED_DESC_LENGTH);
+            messageChunks.forEach(async (chunk, index) => {
+                await msg.reply({
+                    embeds: [
+                        new EmbedBuilder({
+                            description: chunk,
+                            color: 14194326,
+                            footer: {
+                                text: `cost: ${costTime / 1000} s`
+                            },
+                            timestamp: index === messageChunks.length - 1 ? new Date() : undefined
+                        })
+                    ],
+                    allowedMentions: { repliedUser: false }
+                });
             });
         }
         if (cmd == "getmem") {
@@ -166,14 +179,10 @@ ComponentContainer.initialize([
         const {
             content,
             author: {
-                username,
                 id: userId
             },
-            createdTimestamp,
             embeds
         } = msg;
-
-        const nickname = msg.author.globalName || username;
 
         let user = await LevelDBUserRepository.getInstance().findById(userId);
         if (!user) {
@@ -182,10 +191,10 @@ ComponentContainer.initialize([
             if (!res || !user) return;
         }
 
-        // console.log(user)
-
         // let ct = cleanMsg(content); //.split(" ").join("，");
+
         let ct = content; //.split(" ").join("，");
+
         // read msg from self like ai
         if (ct == "" && embeds.length > 0 && embeds[0].description !== null) {
             ct = embeds[0].description;
@@ -197,54 +206,52 @@ ComponentContainer.initialize([
 
                 let result = await cmdParser(msg, session, ct);
                 if (result) return;
+
                 const reply = async (response: { task?: TaskResponse, assistant?: AssistantResponse }) => {
                     const costTime = Date.now() - msg.createdTimestamp;
+
                     if (response.task) {
-                        let channel = getChannel(client, msg.channelId);
-                        if (channel) channel.sendTyping();
-
-                        const embed = new EmbedBuilder({
-                            title: response.task.sender,
-                            description: `${response.task.message}`,
-                            color: 14194326,
-                            footer: {
-                                text: `cost: ${costTime / 1000} s`
-                            },
-                            timestamp: new Date()
-                        });
-
-                        msg.reply({
-                            embeds: [embed],
+                        await msg.reply({
                             content: response.task.instruction,
-                            allowedMentions: {
-                                repliedUser: false
-                            }
+                            embeds: [
+                                new EmbedBuilder({
+                                    title: response.task.sender,
+                                    description: response.task.message,
+                                    color: 14194326,
+                                    footer: {
+                                        text: `cost: ${costTime / 1000} s`
+                                    },
+                                    timestamp: new Date()
+                                })
+                            ],
+                            allowedMentions: { repliedUser: false }
                         });
                     }
+
                     if (response.assistant) {
-                        let channel = getChannel(client, msg.channelId);
+                        const channel = getChannel(client, msg.channelId);
                         if (channel) channel.sendTyping();
 
-                        const embed = new EmbedBuilder({
-                            description: `${response.assistant.response}${response.assistant.reasoning == "" ? "" : "\n\n\`" + response.assistant.reasoning + "\`"}`,
-                            color: 14194326,
-                            footer: {
-                                text: `cost: ${costTime / 1000} s`
-                            },
-                            timestamp: new Date()
-                        });
+                        const fullText = `${response.assistant.response}${response.assistant.reasoning === "" ? "" : "\n\n`" + response.assistant.reasoning + "`"}`;
 
-                        msg.reply({
-                            embeds: [embed],
-                            allowedMentions: {
-                                repliedUser: false
-                            }
+                        await msg.reply({
+                            embeds: [
+                                new EmbedBuilder({
+                                    description: fullText,
+                                    color: 14194326,
+                                    footer: {
+                                        text: `cost: ${costTime / 1000} s`
+                                    },
+                                    timestamp: new Date()
+                                })
+                            ],
+                            allowedMentions: { repliedUser: false }
                         });
 
                         const memories = await ComponentContainer.getMemoryReader().extractFromMessages(session);
                         await cube.memoryTree?.add(memories);
                     }
-                }
+                };
 
                 ComponentContainer.getNova().UserIO.recieve({
                     content: ct,
@@ -254,6 +261,10 @@ ComponentContainer.initialize([
                     timestamp: msg.createdTimestamp,
                     reply
                 });
+
+                const channel = getChannel(client, msg.channelId);
+                if (channel) channel.sendTyping();
+
             } catch (error) {
                 console.error('執行任務過程中出錯:', error);
             }
