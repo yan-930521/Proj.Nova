@@ -139,5 +139,5 @@ Nova（控制中樞）
 * 2025/07/21
   - TaskOrchestrator目前的子任務代理人是固定的，每一位代理人只能負責特定一種任務
     改成sub task agent，然後存取所有工具或許比較好
-  - 大幅改善assistant token用量
+  - 大幅改善assistant token用量<br>
     <image src="./asset/token.png" height="200">
