@@ -9,10 +9,10 @@ import {
 import { ToolNode } from '@langchain/langgraph/prebuilt';
 
 import { ComponentContainer } from '../../../ComponentContainer';
-import { Task } from '../../../domain/entities/Task';
 import { BaseAgent } from '../../../libs/base/BaseAgent';
 import { BaseSuperVisor, BaseSuperVisorCallOptions } from '../../../libs/base/BaseSupervisor';
 import { JSONOutputToolsParser } from '../../Nova';
+import { Task } from '../Task';
 import { Expansion } from './Expansion';
 import { Node } from './Node';
 import { Reflection, ReflectionData } from './Reflection';

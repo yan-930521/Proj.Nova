@@ -1,21 +1,17 @@
 import { z } from 'zod';
 
-import { BaseMessage, SystemMessage } from '@langchain/core/messages';
 import {
     ChatPromptTemplate, PromptTemplate, SystemMessagePromptTemplate
 } from '@langchain/core/prompts';
 import { Runnable } from '@langchain/core/runnables';
-import {
-    _INTERNAL_ANNOTATION_ROOT, Annotation, END, messagesStateReducer, START, StateGraph
-} from '@langchain/langgraph';
-import { OpenAIEmbeddings } from '@langchain/openai';
+import { _INTERNAL_ANNOTATION_ROOT } from '@langchain/langgraph';
 
 import { ComponentContainer } from '../../ComponentContainer';
 import { BaseSuperVisor, BaseSuperVisorCallOptions } from '../../libs/base/BaseSupervisor';
+import { MEMORY_EXTRACTOR_PROMPT, MEMORY_EXTRACTOR_TYPE } from '../prompts/memory';
 import { Session } from '../SessionContext';
 import { Message } from '../user/UserIO';
 import { MemorySystemLogger } from './base/Memory';
-import { MEMORY_EXTRACTOR_PROMPT, MEMORY_EXTRACTOR_TYPE } from './memory';
 import { MemoryNode } from './tree/MemoryNode';
 
 /***
@@ -54,8 +50,6 @@ export class MemoryReader extends BaseSuperVisor {
 
         MemorySystemLogger.debug("Extract memory from messages");
 
-        // const images: string[] = []
-
         // 過濾標籤
         const conversation = messages.filter((m) => !(
             typeof m.content == "string" && (
@@ -66,7 +60,7 @@ export class MemoryReader extends BaseSuperVisor {
         )).map((m) => {
             return `[${new Date(m.timestamp).toLocaleString()}] [${m.type}]: ${(m.content as string).replace("[response]:", "").trim()}`
         }).join("\n");
-        
+
         session.context.recentMessages = [];
 
         const result = await this.chains.MemoryExtractor.invoke({

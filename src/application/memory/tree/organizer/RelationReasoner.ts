@@ -9,7 +9,7 @@ import {
     AGGREGATE_PROMPT, AGGREGATE_TYPE, INFER_FACT_PROMPT, INFER_FACT_TYPE, LOCAL_SUBCLUSTER_PROMPT,
     LOCAL_SUBCLUSTER_TYPE, PAIRWISE_RELATION_PROMPT, PAIRWISE_RELATION_TYPR, REORGANIZE_PROMPT,
     REORGANIZE_TYPE
-} from '../../memory';
+} from '../../../prompts/memory';
 import { EdgeType } from '../MemoryEdge';
 import { MemoryNode } from '../MemoryNode';
 import { NodeManager } from '../NodeManager';

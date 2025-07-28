@@ -56,29 +56,43 @@ export class MemoryCube extends BaseComponent {
     }
 
     async search(query: string, topk: number = 3, session: Session) {
-        let result = await this.memoryTree?.search(query, topk, session);
-        return result ?? [];
+        if (ComponentContainer.getConfig().isMultipleChat) return (await this.memoryTree?.search(query, topk, null)) ?? [];
+        return (await this.memoryTree?.search(query, topk, session)) ?? [];
     }
 
     getMemory(session: Session) {
-        let result = this.memoryTree?.nodeManager.toString(null, session, true, 5);
-        return result;
+        if (ComponentContainer.getConfig().isMultipleChat) return this.memoryTree?.nodeManager.toString(null, null, true, 5);
+        return this.memoryTree?.nodeManager.toString(null, session, true, 5);
     }
 
     getWorkingMemory(session: Session) {
+        if (ComponentContainer.getConfig().isMultipleChat) return this.memoryTree.getWorkingMemory(null);
         return this.memoryTree.getWorkingMemory(session);
     }
 
     toString(nodes: MemoryNode[] | null, session: Session, topK?: number) {
-        let result = this.memoryTree?.nodeManager.toString(nodes, session, false, topK);
-        MemorySystemLogger.debug("Memory Tree:\n" + result);
-        return result
+        if (ComponentContainer.getConfig().isMultipleChat) {
+            let result = this.memoryTree?.nodeManager.toString(nodes, null, false, topK);
+            MemorySystemLogger.debug("Memory Tree:\n" + result);
+            return result;
+        } else {
+            let result = this.memoryTree?.nodeManager.toString(nodes, session, false, topK);
+            MemorySystemLogger.debug("Memory Tree:\n" + result);
+            return result;
+        }
     }
 
     toDetailString(nodes: MemoryNode[] | null, session: Session, topK?: number) {
-        let result = this.memoryTree?.nodeManager.toString(nodes, session, true, topK);
-        MemorySystemLogger.debug("Memory Tree:\n" + result);
-        return result
+        if (ComponentContainer.getConfig().isMultipleChat) {
+            let result = this.memoryTree?.nodeManager.toString(nodes, null, true, topK);
+            MemorySystemLogger.debug("Memory Tree:\n" + result);
+            return result;
+        }
+        else {
+            let result = this.memoryTree?.nodeManager.toString(nodes, session, true, topK);
+            MemorySystemLogger.debug("Memory Tree:\n" + result);
+            return result;
+        }
     }
 
     async saveCube(id: string = this.id): Promise<boolean> {

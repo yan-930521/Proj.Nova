@@ -84,6 +84,8 @@ export class Config extends BaseComponent {
 
     public optimizationTime: number = 1000 * 60 * 60;
 
+    public isMultipleChat: boolean = true;
+
     constructor() {
         super({
             name: "Config"

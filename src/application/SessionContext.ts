@@ -9,6 +9,7 @@ import { MemorySystemLogger } from './memory/base/Memory';
 import { Message } from './user/UserIO';
 
 export class Session {
+    public isReplying: boolean = false;
     constructor(
         public id: string,
         public user: User,

@@ -7,7 +7,7 @@ import { tool } from '@langchain/core/tools';
 
 import { ComponentContainer } from '../../ComponentContainer';
 
-export const downloadFileFromUrlTool = tool(
+export const webFetchTool = tool(
     async ({ url, filePath }) => {
         try {
             const response = await axios.get(url, { responseType: 'arraybuffer' });
@@ -20,8 +20,8 @@ export const downloadFileFromUrlTool = tool(
         }
     },
     {
-        name: "download_file",
-        description: "A tool for downloading files from a given URL.",
+        name: "web_fetch",
+        description: "A tool for fetch files from a given URL.",
         schema: z.object({
             url: z.string().describe("The URL of the file to download."),
             filePath: z.string().describe("The path where the downloaded file will be saved."),

@@ -1,8 +1,8 @@
-import { AssistantResponse } from '../../application/assistant/Assistant';
 import { ComponentContainer } from '../../ComponentContainer';
+import { User } from '../../domain/entities/User';
 import { TypedEvent } from '../../libs/events/Events';
 import { getUid } from '../../libs/utils/string';
-import { User } from './User';
+import { AssistantResponse } from '../assistant/Assistant';
 
 export enum TaskType {
     CasualChat = "CasualChat",
@@ -89,10 +89,13 @@ export class Task {
     public final_report: string = "";
     public statusHistory: TaskStatusChange[] = [];
 
-    public planList: string[] = []; // 任務規劃流程
+    public isComplete: boolean = false;
+
     public updateHistory: RecordItem[] = []; // 更新歷史紀錄
 
     public forceExit = new AbortController();
+
+    public parent?: Task;
 
     constructor(
         taskData: { user: User } & Partial<Task>

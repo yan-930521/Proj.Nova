@@ -25,7 +25,7 @@ export class Logger {
      * @param message 要記錄的訊息
      */
     log(level: 'info ' | 'warn ' | 'error' | 'debug', message: string) {
-        const timestamp = new Date().toISOString(); // 紀錄時間戳
+        const timestamp = new Date().toLocaleString(); // 紀錄時間戳
         console.log(`[${timestamp}] [${this.paddedName}] [${level.toUpperCase()}]: ${message}`);
     }
 
@@ -62,8 +62,7 @@ export class Logger {
     debug(message: string, loggerName: string = this.name) {
         this.log('debug', message);
     }
-
-
+    
     createSubLogger(loggerName: string) {
         if (!this.isSubLogger(loggerName)) {
             this.setSubLogger(loggerName);

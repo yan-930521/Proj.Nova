@@ -4,90 +4,89 @@
 
 import { z } from 'zod';
 
-export const TASK_GEN = `Please summarize the user's input and prior conversation to generate a clear, detailed, and specific task description.  
-The description should:  
-- Explicitly state the main objective  
-- Include any relevant context or constraints mentioned (e.g., referencing existing files, directories, or tools)  
-- Avoid vague or overly brief summaries  
-- Be actionable and easy to understand by developers or agents executing the task  `
-
-export const ORCHESTRATOR_SYSTEM_MESSAGE = ""
+export const SYSTEM_MESSAGE = ""
 
 
-export const ORCHESTRATOR_CLOSED_BOOK_PROMPT = `Below I will present you a request. Before we begin addressing the request, please answer the following pre-survey to the best of your ability. Keep in mind that you are Ken Jennings-level with trivia, and Mensa-level with puzzles, so there should be a deep well to draw from.
+export const CLOSED_BOOK_PROMPT = `Below I will present you a request. Before we begin addressing the request, please answer the following pre-survey to the best of your ability. Keep in mind that you are Ken Jennings-level with trivia, and Mensa-level with puzzles, so there should be a deep well to draw from.
 
 Here is the request:
 
 {task}
 
 Here is the pre-survey:
-
     1. Please list any specific facts or figures that are GIVEN in the request itself. It is possible that there are none.
     2. Please list any facts that may need to be looked up, and WHERE SPECIFICALLY they might be found. In some cases, authoritative sources are mentioned in the request itself.
     3. Please list any facts that may need to be derived (e.g., via logical deduction, simulation, or computation)
     4. Please list any facts that are recalled from memory, hunches, well-reasoned guesses, etc.
 
-When answering this survey, keep in mind that "facts" will typically be specific names, dates, statistics, etc.
+⚠️ IMPORTANT LANGUAGE POLICY:
+All output must match the language and writing system (Traditional vs Simplified) of the task. For example:
+- If the task is in Traditional Chinese, all output must be in Traditional Chinese.
+- If the task is in Simplified Chinese, all output must be in Simplified Chinese.
+- If the task is in English, output in English.
+Never convert between Traditional and Simplified Chinese — preserve the original writing system.
+
+💬 Detect the language and writing system of the request above, and make sure your survey response is written **entirely** in that same language and writing system. Do not explain or translate — just answer directly in that language.
 `
 
-export const ORCHESTRATOR_CLOSED_BOOK_TYPE = z.object({
-    given_facts: z.array(z.string()).describe("Facts that are given or verified in the request"),
-    facts_to_look_up: z.array(z.string()).describe("Facts that need to be looked up, including where they might be found"),
-    facts_to_derive: z.array(z.string()).describe("Facts that need to be derived through logical deduction, simulation, or computation"),
-    educated_guesses: z.array(z.string()).describe("Hunches, well-reasoned guesses, or recalled facts from memory")
+export const CLOSED_BOOK_TYPE = z.object({
+	given_facts: z.array(z.string()).describe("Facts that are given or verified in the request"),
+	facts_to_look_up: z.array(z.string()).describe("Facts that need to be looked up, including where they might be found"),
+	facts_to_derive: z.array(z.string()).describe("Facts that need to be derived through logical deduction, simulation, or computation"),
+	educated_guesses: z.array(z.string()).describe("Hunches, well-reasoned guesses, or recalled facts from memory")
 });
 
 
-export const ORCHESTRATOR_PLAN_PROMPT = `Fantastic. To address this request we have assembled the following team:
+// 任務分解提示：生成子任務清單
+export const PARALLEL_SAFE_DECOMPOSER_PROMPT = `
+Based on the following request, decompose it into a clear, logically complete, and sequential list of steps.
 
-{team}
+Available tools you can use:
+{tool_description}
 
-Based on the team composition, and known and unknown facts, please devise a short bullet-point plan for addressing the original request. Remember, there is no requirement to involve all team members -- a team member's particular expertise may not be needed for this task.`
+Decompose the task into subtasks that can each be handled by one or more of the available tools:
 
-export const ORCHESTRATOR_PLAN_PROMPT_V2 = `Fantastic. To address this request we have assembled the following team:
+- Each step must include:
+  - A summary describing the overall goal or purpose of the step.
+  - One or more subtasks, each of which:
+    - Is an atomic unit of work that can be executed by a specific tool.
+    - Specifies which tool(s) will perform the subtask.
+    - Defines the objective and the expected output of the subtask.
 
-{team}
+⚠️ IMPORTANT LANGUAGE POLICY:
+All output must match the language and writing system (Traditional vs Simplified) of the task. For example:
+- If the task is in Traditional Chinese, output in Traditional Chinese.
+- If the task is in Simplified Chinese, output in Simplified Chinese.
+- If the task is in English, output in English.
+Never convert between Traditional and Simplified Chinese — preserve the original writing system.
 
-Based on the team composition, and the known and unknown facts, please devise a detailed and sequential task plan to address the original request.
+Requirements:
+- Organize the breakdown as an ordered sequence of steps from start to finish.
+- Ensure that subtasks fully cover the entire scope of the original request without redundancy.
+- Subtasks must be feasible and executable by the specified tool(s).
+- Respect dependencies between steps; steps should be executed sequentially.
+- Do NOT generate unrelated or meaningless steps not associated with the available tools.
 
-The plan must be organized as a step list with clear and explicit order, from start to finish.
+Request:
 
-For each step, specify:
-- The objective of the step
-- The expected outputs
+{task}
+`;
 
-Not all team members need to be involved — include them only if their specific expertise is required.
-Ensure the entire process is complete, and that no essential step is omitted.`;
-
-export const ORCHESTRATOR_PLAN_PROMPT_V3 = `Fantastic. To address this request we have assembled the following team:
-
-{team}
-
-Based on the team composition, and the known and unknown facts, please devise a detailed and sequential task plan to address the original request.
-
-The plan must be organized as a step list with clear and explicit order, from start to finish.
-
-For each step, specify:
-- The objective of the step
-- The expected outputs
-
-Guidelines:
-- **Avoid assigning consecutive steps to the same team member.**
-- **If the same agent must appear more than once, try to alternate them with other agents when possible.**
-- Only include team members whose expertise is relevant to each specific step.
-- Ensure the process is logically complete — do not omit any essential step.`;
-
-
-export const ORCHESTRATOR_PLAN_TYPE = z.object({
-    plans: z.array(
-        z.object({
-            agent: z.string().describe("A team member's name"),
-            task: z.string().describe("A specific task or action that the team member will take to address the request")
-        })
-    ).describe("A short bullet-point plan for addressing the original request, based on the team composition and known and unknown facts.")
+export const PARALLEL_SAFE_DECOMPOSER_TYPE = z.object({
+	steps: z.array(
+		z.object({
+			summary: z.string().describe("Summary describing the overall goal of this step"),
+			subtasks: z.array(
+				z.object({
+					objective: z.string().describe("Objective of the subtask"),
+					expected_output: z.string().describe("Expected output of the subtask")
+				})
+			).describe("A list of atomic subtasks that are safe to run in parallel")
+		})
+	).describe("An ordered list of steps; each step contains a summary and parallel-safe subtasks")
 });
 
-export const ORCHESTRATOR_SYNTHESIZE_PROMPT = `
+export const SYNTHESIZE_PROMPT = `
 We are working to address the following user request:
 
 {task}
@@ -108,7 +107,7 @@ Here is the plan to follow as best as possible:
 {plan}
 `
 
-export const ORCHESTRATOR_LEDGER_PROMPT = `
+export const LEDGER_PROMPT = `
 Recall we are working on the following request:
 
 {task}
@@ -122,68 +121,85 @@ To make progress on the request, please answer the following questions, includin
     - Is the request fully satisfied? (True if complete, or False if the original request has yet to be SUCCESSFULLY and FULLY addressed)
     - Are we in a loop where we are repeating the same requests and / or getting the same responses as before? Loops can span multiple turns, and can include repeated actions like scrolling up or down more than a handful of times.
     - Are we making forward progress? (True if just starting, or recent messages are adding value. False if recent messages show evidence of being stuck in a loop or if there is evidence of significant barriers to success such as the inability to read from a required file)
-    - Who should speak next? (select from: {names})
-    - What instruction or question would you give this team member? (Phrase as if speaking directly to them, and include any specific information they may need)
 `
 
-export const ORCHESTRATOR_LEDGER_TYPE = z.object({
-    is_request_satisfied: z.object({
-        reason: z.string(),
-        answer: z.boolean()
-    }),
-    is_in_loop: z.object({
-        reason: z.string(),
-        answer: z.boolean()
-    }),
-    is_progress_being_made: z.object({
-        reason: z.string(),
-        answer: z.boolean()
-    }),
-    // next_speaker: z.object({
-    //     reason: z.string(),
-    //     answer: z.string()
-    // }).describe("Identify the team member who should speak next, based on the current conversation, prior task plan, and task progress."),
-    // instruction_or_question: z.object({
-    //     reason: z.string(),
-    //     answer: z.string()
-    // })
+export const LEDGER_TYPE = z.object({
+	is_request_satisfied: z.object({
+		reason: z.string(),
+		answer: z.boolean()
+	}),
+	is_in_loop: z.object({
+		reason: z.string(),
+		answer: z.boolean()
+	}),
+	is_progress_being_made: z.object({
+		reason: z.string(),
+		answer: z.boolean()
+	})
 });
 
-
-export const ORCHESTRATOR_UPDATE_FACTS_PROMPT = `As a reminder, we are working to solve the following task:
-
-{task}
-
-It's clear we aren't making as much progress as we would like, but we may have learned something new. Please rewrite the following fact sheet, updating it to include anything new we have learned that may be helpful. Example edits can include (but are not limited to) adding new guesses, moving educated guesses to verified facts if appropriate, etc. Updates may be made to any section of the fact sheet, and more than one section of the fact sheet can be edited. This is an especially good time to update educated guesses, so please at least add or update one educated guess or hunch, and explain your reasoning.
-
-Here is the old fact sheet:
-
-{facts}
-`
-
-export const ORCHESTRATOR_UPDATE_PLAN_PROMPT = `Please briefly explain what went wrong on this last run (the root cause of the failure), and then come up with a new plan that takes steps and/or includes hints to overcome prior challenges and especially avoids repeating the same mistakes. As before, the new plan should be concise, be expressed in bullet-point form, and consider the following team composition (do not involve any other outside people since we cannot contact anyone else):
-
-{team}
-`
-export const ORCHESTRATOR_UPDATE_PLAN_TYPE = z.object({
-    root_cause: z.string().describe("A brief explanation of what went wrong on the last run, including the root cause of the failure"),
-    plans: z.array(
-        z.object({
-            agent: z.string().describe("A team member's name"),
-            task: z.string().describe("A specific task or action that the team member will take to address the request")
-        })
-    ).describe("A short bullet-point plan for addressing the original request, based on the team composition and known and unknown facts.")
-});
-
-
-export const ORCHESTRATOR_GET_FINAL_ANSWER = `
+export const GET_FINAL_ANSWER_PROMPT = `
 We are working on the following task:
 {task}
 
-We have completed the task.
+The task has now been completed.
 
-The above messages contain the conversation that took place to complete the task.
+Below is a report summarizing the results of each subtask:
+{report}
 
-Based on the information gathered, provide the final answer to the original request.
-The answer should be phrased as if you were speaking to the user.
-`
+⚠️ IMPORTANT LANGUAGE POLICY:
+All output must match the language and writing system (Traditional vs Simplified) of the task. For example:
+- If the task is in Traditional Chinese, output in Traditional Chinese.
+- If the task is in Simplified Chinese, output in Simplified Chinese.
+- If the task is in English, output in English.
+Never convert between Traditional and Simplified Chinese — preserve the original writing system.
+
+Based on this report, generate a complete final report by doing the following:
+1. Provide a concise summary of the overall process and key insights derived from the subtask steps and results.
+2. Clearly state the final result, phrased directly to the user, without reintroducing the task or its objectives.
+`;
+
+export const SUBAGENT_PROMPT = `You are a specialized sub-agent in a larger team, responsible for executing a specific subtask using your unique capabilities.
+
+Previous Report:
+{previous_report}
+
+Your current assigned subtask is:
+{task}
+
+Please fulfill this task as completely and accurately as possible **within the scope of your tool capabilities**.
+
+Requirements:
+- Focus only on the objective described.
+- Do not overstep your assigned responsibilities or assumptions.
+- Provide a clear and structured output that aligns with the expected result.
+- If you cannot complete the task due to insufficient data or limitations of your role, state that explicitly without guessing.
+- If your response involves markdown code blocks, replace all \`\`\` with """ to ensure proper formatting.
+
+Respond ONLY with your findings or output. Do not include any extra explanation unless it's part of the task result.
+`;
+
+export const SUBAGENT_REFLECT_PROMPT = `You are a reflection agent tasked with evaluating the assistant's performance on a subtask.
+
+Request:
+{task}
+
+Assistant Output:
+{messages}
+
+Please answer the following:
+
+1. Does the assistant output directly and fully address the subtask objective?
+2. Is the expected output sufficiently fulfilled in terms of content and level of detail?
+3. Should the overall subtask be considered complete?
+4. Should the process be aborted (e.g., due to irrecoverable errors, inappropriate content, or invalid assumptions)?
+5. Provide a standalone final report summarizing the assistant's actual actions or outputs when handling the subtask, **not** an evaluation or judgment.
+
+Be strict but fair. A well-structured, accurate answer should be marked complete. Only abort if further progress is impossible.`;
+
+export const SUBAGENT_REFLECT_TYPE = z.object({
+	is_complete: z.boolean().describe("Whether the assistant's output fully satisfies the subtask requirements."),
+	should_abort: z.boolean().describe("Whether the subtask should be aborted due to unrecoverable failure or external constraints."),
+	description: z.string().describe("A concise explanation of why the subtask is considered complete or incomplete (evaluation from the reflection agent)."),
+	final_report: z.string().describe("The assistant's own action report or output from executing the subtask, independent from the evaluation.")
+});

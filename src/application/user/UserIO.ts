@@ -1,11 +1,11 @@
 import { MessageContent } from '@langchain/core/messages';
 
 import { ComponentContainer } from '../../ComponentContainer';
-import { TaskResponse } from '../../domain/entities/Task';
 import { User } from '../../domain/entities/User';
 import { BaseComponent } from '../../libs/base/BaseComponent';
 import { AssistantResponse } from '../assistant/Assistant';
 import { Session } from '../SessionContext';
+import { TaskResponse } from '../task/Task';
 
 export type SenderType = 'user' | 'assistant'
 
@@ -42,12 +42,18 @@ export class UserIO extends BaseComponent {
 
     async handleMessageCreate(msg: Message) {
         const userId = msg.user.id;
+        const session = await ComponentContainer.getNova().SessionContext.ensureSession(userId);
+
         const dispatch = () => {
-            // 延遲五秒發送蒐集到的訊息陣列給Assistant
+            // 延遲3秒發送蒐集到的訊息陣列給Assistant
             return setTimeout(async () => {
-                // 不放裡面的話每次createmessage都要重新get
-                const session = await ComponentContainer.getNova().SessionContext.ensureSession(userId);
-                session.context.inputMessages = session.context.inputMessages.concat(this.msgList[userId].msgs);
+                // 避免歷史衝突
+                if (session.isReplying) {
+                    this.msgList[userId].delay = dispatch();
+                    return;
+                }
+
+                session.context.inputMessages.push(...this.msgList[userId].msgs);
                 this.msgList[userId].msgs = [];
                 ComponentContainer.getNova().emit("messageDispatch", session);
             }, 3000);

@@ -14,8 +14,8 @@ import { MemoryReader } from './application/memory/MemoryReader';
 import { Nova } from './application/Nova';
 import { Session } from './application/SessionContext';
 import { LATS } from './application/task/lats/LATS';
+import { TaskResponse } from './application/task/Task';
 import { ComponentContainer } from './ComponentContainer';
-import { TaskResponse } from './domain/entities/Task';
 import { User } from './domain/entities/User';
 import { LevelDB } from './frameworks/levelDB/LevelDB';
 import { LevelDBTaskRepository } from './frameworks/levelDB/LevelDBTaskRepository';
@@ -37,7 +37,8 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildIntegrations
     ]
 });
 
@@ -156,10 +157,6 @@ ComponentContainer.initialize([
 
     client.login(ComponentContainer.getConfig().DISCORD_TOKEN);
 
-    const testcmd = new SlashCommandBuilder()
-        .setName('ping')
-        .setDescription('Replies with Pong!');
-
     client.on(Events.InteractionCreate, interaction => {
         if (!interaction.isChatInputCommand()) return;
         interaction.reply('Pong!');
@@ -168,7 +165,6 @@ ComponentContainer.initialize([
     client.on(Events.MessageCreate, async msg => {
         // if(msg.guildId != "855817825822179329") return;
         if (msg.author.id == (client as Client<true>).user.id) return;
-
 
         if (msg.channelId != "1105093381085995058") {
             if (!msg.mentions.users.find((user) => user.id == (client as Client<true>).user.id)) {
@@ -248,8 +244,10 @@ ComponentContainer.initialize([
                             allowedMentions: { repliedUser: false }
                         });
 
-                        const memories = await ComponentContainer.getMemoryReader().extractFromMessages(session);
-                        await cube.memoryTree?.add(memories);
+                        setImmediate(async () => {
+                            const memories = await ComponentContainer.getMemoryReader().extractFromMessages(session);
+                            await cube.memoryTree?.add(memories);
+                        });
                     }
                 };
 

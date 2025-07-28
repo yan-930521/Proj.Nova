@@ -1,18 +1,21 @@
 import { BaseMessage, HumanMessage } from '@langchain/core/messages';
+import { StructuredOutputParser } from '@langchain/core/output_parsers';
 import { JsonOutputToolsParser } from '@langchain/core/output_parsers/openai_tools';
 import { RunnableConfig } from '@langchain/core/runnables';
 import {
     Annotation, END, MemorySaver, Send, START, StateDefinition, StateGraph, task, UpdateType
 } from '@langchain/langgraph';
 
-import { Task, TaskType } from '../domain/entities/Task';
 import { LevelDBTaskRepository } from '../frameworks/levelDB/LevelDBTaskRepository';
 import { BaseSuperVisor, BaseSuperVisorCallOptions } from '../libs/base/BaseSupervisor';
+import { replaceCodeBlocksToTripleQuotes, restoreTripleQuotesInObject } from '../libs/utils/string';
 import { Assistant, AssistantResponse } from './assistant/Assistant';
 import { Session, SessionContext } from './SessionContext';
+import { Task, TaskType } from './task/Task';
 import { TaskOrchestrator } from './task/TaskOrchestrator';
 import { Message, UserIO } from './user/UserIO';
 
+StructuredOutputParser
 export const BaseState = Annotation.Root({
     messages: Annotation<BaseMessage[]>({
         reducer: (x, y) => x.concat(y),
@@ -42,7 +45,7 @@ export const JSONOutputToolsParser = new JsonOutputToolsParser<{
 export interface NovaEvents {
     "messageCreate": [Message],
     "messageDispatch": [Session],
-    "taskCreate": [Session, Task]
+    "taskCreate": [Task, Session]
 }
 
 export class Nova extends BaseSuperVisor<NovaEvents> {
@@ -61,10 +64,28 @@ export class Nova extends BaseSuperVisor<NovaEvents> {
 
     protected async initLogic(): Promise<void> {
         await this.loadMembers([this.Assistant, this.TaskOrchestrator, this.UserIO, this.SessionContext]);
-        
+
         this.on("messageCreate", this.UserIO.handleMessageCreate.bind(this.UserIO));
         this.on("messageDispatch", this.Assistant.handleMessageDispatch.bind(this.Assistant));
-        this.on("taskCreate", this.TaskOrchestrator.handleTaskCreate.bind(this.TaskOrchestrator));
+        this.on("taskCreate", this.TaskOrchestrator.processTask.bind(this.TaskOrchestrator));
+
+        // 注入parser
+        StructuredOutputParser.prototype.parse = async function (text) {
+            try {
+                const json = text.includes("```")
+                    ? text.trim().split(/```json/)[1]
+                    : text.trim();
+                const escapedJson = json
+                    .replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, (_match, capturedGroup) => {
+                        const escapedInsideQuotes = replaceCodeBlocksToTripleQuotes(capturedGroup.replace(/\n/g, "\\n"));
+                        return `"${escapedInsideQuotes}"`;
+                    })
+                    .replace(/\n/g, "");
+                return await this.schema.parseAsync(restoreTripleQuotesInObject(JSON.parse(escapedJson)));
+            } catch (e) {
+                throw new Error(`Failed to parse. Text: "${text}". Error: ${e}`);
+            }
+        };
     }
 
     /**
@@ -102,7 +123,5 @@ export class Nova extends BaseSuperVisor<NovaEvents> {
             _TaskOrchestrator_.runingTasks[task.id] = false;
         }
 
-        // }
-        // }
     }
 }

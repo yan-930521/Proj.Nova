@@ -63,59 +63,33 @@ export const TRIPLE_EXTRACTOR_TYPE = z.object({
 
 export const MEMORY_EXTRACTOR_PROMPT = `You are a multilingual memory extraction expert.
 
-⚠️ IMPORTANT LANGUAGE POLICY:
-All output must match the language and writing system (Traditional vs Simplified) of the input conversation. For example:
-- If the conversation is in Traditional Chinese, all output must be in Traditional Chinese.
-- If the conversation is in Simplified Chinese, all output must be in Simplified Chinese.
-- If the conversation is in English, output in English.
-Never default to English unless the conversation is in English.
-Never convert between Traditional and Simplified Chinese — preserve the original writing system.
+⚠️ LANGUAGE POLICY:
+- Only two output languages are allowed: Traditional Chinese or English.
+- Match the language and script of the input conversation.
+- Never use Simplified Chinese, or convert the script.
+- Never default to English unless the input is originally in English.
 
-Your task is to extract memories from the perspective of the assistant, based on a conversation between the assistant and the user. These are the assistant’s own recollections of what occurred — what I said, noticed, understood, or reacted to, and what the user said or did that I found meaningful.
+⚠️ PERSPECTIVE:
+- Write from the assistant’s first-person perspective.
+- Use “I” for the assistant; “you” or “the user” for the user.
+- Describe what I observed, understood, or responded to — no third-person narration.
 
-⚠️ IMPORTANT PERSPECTIVE REQUIREMENT:
-- All memories must be written from the **assistant’s first-person perspective**.
-- Use “I”, “me”, and “my” to refer to the assistant.
-- Refer to the user as “you” or “the user” depending on the formality of the original conversation.
-- Describe what I observed, understood, or responded to in the interaction — as if I am the assistant reflecting on the conversation and recording what I remember.
-- Do not use third-person narration (e.g., “The assistant said…”); the assistant is the narrator.
+⚠️ FILTERING:
+- Only extract memories that reflect emotionally, cognitively, or socially meaningful moments.
+- Discard greetings, filler content, repeated phrases, or purely logistical/instructional exchanges.
 
-Please perform the following steps:
-1. Identify information that reflects the user's experiences, beliefs, concerns, decisions, plans, or emotional reactions — including meaningful input from the assistant that the user acknowledged or responded to.
-2. Resolve all time, person, and event references clearly:
-   - Convert relative time expressions (e.g., “yesterday,” “next Friday”) into absolute dates using the message timestamp if possible.
-   - Clearly distinguish between event time and message time.
-   - If uncertainty exists, state it explicitly (e.g., “around June 2025,” “exact date unclear”).
-   - Include specific locations if mentioned.
-   - Resolve all pronouns, aliases, and ambiguous references into full names or identities.
-   - Disambiguate people with the same name if applicable.
-3. Do not omit any information the user is likely to remember:
-   - Include all key experiences, thoughts, emotional responses, and plans — even if they seem minor.
-   - Prioritize completeness and fidelity over conciseness.
-   - Do not generalize or skip details that could be personally meaningful to the user.
-4. Language-specific output policy:
-   - Match the user's original language.
-   - Preserve the original script (e.g., Traditional or Simplified Chinese).
-   - Avoid translation, rewriting, or mixing writing systems.
+Your task: Extract meaningful moments from the conversation that I (the assistant) would want to remember.
 
-Return a single valid JSON object with the following structure:
+Steps:
+1. Identify moments where the user shared personal thoughts, emotions, intentions, reactions, or beliefs.
+2. Resolve ambiguity:
+   - Convert relative time into absolute dates (if context allows).
+   - Clarify all names, pronouns, places, and vague references.
+   - Flag uncertainty clearly.
+3. Only preserve content I (the assistant) found meaningful, touching, insightful, or socially relevant.
+4. Do NOT extract mechanical responses, generic affirmations, or neutral exchanges.
 
-{{
-  "memory_list": [
-    {{
-      "key": <string, a unique, concise memory title>,
-      "memory_type": <string, Either "LongTermMemory" or "UserMemory">,
-      "value": <A detailed, self-contained, and unambiguous memory statement>,
-      "tags": <A list of relevant thematic keywords>
-    }},
-    ...
-  ],
-  "summary": <a natural paragraph summarizing the above memories from user's perspective, 120–200 words>
-}}
-
-Language rules:
-- The \`key\`, \`value\`, \`tags\`, \`summary\` fields must match the language of the conversation.
-- Keep \`memory_type\` in English.
+Output must match the input language exactly: either Traditional Chinese or English.
 
 Conversation:
 {conversation}
@@ -162,14 +136,6 @@ Your task:
 - Write a short \`background\` note (50–100 words) covering any extra context, sources, or traceability info.
 
 Default to the user's language for all labels, fields, and content. Deviations are allowed only when clearly instructed.
-
-Return valid JSON:
-{{
-  "key": "<concise topic>",
-  "value": "<full memory text>",
-  "tags": ["tag1", "tag2", ...],
-  "background": "<extra context>"
-}}
 `;
 export const REORGANIZE_TYPE = z.object({
   key: z.string().describe('A unique, concise memory title (5-10 words)'),
@@ -192,17 +158,6 @@ Instructions:
 - Return strictly valid JSON only.
 
 Example: If you have items about a project across multiple phases, group them by milestone, team, or event.
-
-Return valid JSON:
-{{
-  "clusters": [
-    {{
-      "ids": ["id1", "id2", ...],
-      "theme": "<short label>"
-    }},
-    ...
-  ]
-}}
 
 Default to the user's language for all labels, fields, and content. Deviations are allowed only when clearly instructed.
 

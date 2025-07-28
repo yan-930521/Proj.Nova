@@ -52,7 +52,6 @@ export class MemoryTree {
 
         MemorySystemLogger.debug(`Add memories: \n${mem_str}`);
 
-
         // Step 1: process memory
         // await Promise.all(memories.map((m) => this.processMemory(m)));
         // 同時對儲存node導致檔案衝突錯誤
@@ -79,18 +78,30 @@ export class MemoryTree {
         }
     }
 
-    async getWorkingMemory(session: Session) {
-        const userId = session.user.id;
-        const workingMemories = Array.from(this.nodeManager
-            .getAllNodes()
-            .values())
-            .filter(
-                (node) =>
-                    node.metadata.memory_type === "WorkingMemory" &&
-                    node.metadata.user_id === userId &&
-                    node.metadata.status === "activated"
-            );
-        return workingMemories;
+    async getWorkingMemory(session: Session | null) {
+        if (!session) {
+            const workingMemories = Array.from(this.nodeManager
+                .getAllNodes()
+                .values())
+                .filter(
+                    (node) =>
+                        node.metadata.memory_type === "WorkingMemory" &&
+                        node.metadata.status === "activated"
+                );
+            return workingMemories;
+        } else {
+            const userId = session.user.id;
+            const workingMemories = Array.from(this.nodeManager
+                .getAllNodes()
+                .values())
+                .filter(
+                    (node) =>
+                        node.metadata.memory_type === "WorkingMemory" &&
+                        node.metadata.user_id === userId &&
+                        node.metadata.status === "activated"
+                );
+            return workingMemories;
+        }
     }
 
     /**
@@ -207,17 +218,27 @@ export class MemoryTree {
     }
 
     async search(
-        query: string, topK: number, session: Session
+        query: string, topK: number, session: Session | null
     ) {
         MemorySystemLogger.debug("Searching: " + query);
         // 搜尋最相關的節點
         const vector = await this.embedder.embedQuery(query);
 
-        const results = await this.searchByMetadata(vector, topK, {
-            user_id: session.user.id,
-            status: "activated",
-            memory_type: ['LongTermMemory', 'UserMemory']
-        });
+        let results: QueryResult<GraphNodeMetadata>[];
+
+        if (!session) {
+            results = await this.searchByMetadata(vector, topK, {
+                status: "activated",
+                memory_type: ['LongTermMemory', 'UserMemory']
+            });
+        }
+        else {
+            results = await this.searchByMetadata(vector, topK, {
+                user_id: session.user.id,
+                status: "activated",
+                memory_type: ['LongTermMemory', 'UserMemory']
+            });
+        }
 
         const visited = new Set<string>();
         const nodes: MemoryNode[] = [];

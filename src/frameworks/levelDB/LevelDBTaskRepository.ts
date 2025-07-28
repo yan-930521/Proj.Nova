@@ -1,4 +1,4 @@
-import { Task } from '../../domain/entities/Task';
+import { Task } from '../../application/task/Task';
 import { User } from '../../domain/entities/User';
 import { TaskRepository } from '../../domain/repositories/TaskRepository';
 

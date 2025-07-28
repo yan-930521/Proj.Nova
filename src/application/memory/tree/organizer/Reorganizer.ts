@@ -6,10 +6,10 @@ import { Runnable, RunnableConfig } from '@langchain/core/runnables';
 import { ChatOpenAI, ChatOpenAICallOptions, OpenAIEmbeddings } from '@langchain/openai';
 
 import { ComponentContainer } from '../../../../ComponentContainer';
-import { MemorySystemLogger } from '../../base/Memory';
 import {
     LOCAL_SUBCLUSTER_PROMPT, LOCAL_SUBCLUSTER_TYPE, REORGANIZE_PROMPT, REORGANIZE_TYPE
-} from '../../memory';
+} from '../../../prompts/memory';
+import { MemorySystemLogger } from '../../base/Memory';
 import { MemoryEdge } from '../MemoryEdge';
 import { MemoryNode, NodeMemoryType } from '../MemoryNode';
 import { NodeManager } from '../NodeManager';

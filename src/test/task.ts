@@ -12,7 +12,8 @@ import { MemoryReader } from '../application/memory/MemoryReader';
 import { GraphNodeMetadata, MemoryTree, NODES_PATH } from '../application/memory/tree/MemoryTree';
 import { Nova } from '../application/Nova';
 import { LATS } from '../application/task/lats/LATS';
-import { TaskResponse } from '../application/task/Task';
+import { SubAgent } from '../application/task/SubAgent';
+import { Task, TaskResponse } from '../application/task/Task';
 import { Message } from '../application/user/UserIO';
 import { ComponentContainer } from '../ComponentContainer';
 import { User } from '../domain/entities/User';
@@ -50,44 +51,23 @@ ComponentContainer.initialize([
     )
 
     await checkVectra();
+    let user = await LevelDBUserRepository.getInstance().findById("823885929830940682");
+    if (!user) {
+        user = new User("823885929830940682", "櫻2", {})
+        let res = await LevelDBUserRepository.getInstance().create(user);
+        if (!res || !user) return;
+    }
 
-    const rl = createInterface({
-        input: process.stdin,
-        output: process.stdout,
+    const session = await ComponentContainer.getNova().SessionContext.ensureSession(user.id);
+
+    const task = new Task({
+        user,
+        userInput: "下載指定的圖片並保存至本地。圖片鏈接為 https://images-ext-1.discordapp.net/external/Et_tPcDKyzu6NyAo5Ii1_DRzceSrYdeOz6lLkwKs00Y/https/cdn.discordapp.com/icons/855817825822179329/11e7988d1bf46a6f955f3f425e8c8ba0.png?format=webp&quality=lossless&width=200&height=200",
+        description: "下載指定的圖片並保存至本地。圖片鏈接為 https://images-ext-1.discordapp.net/external/Et_tPcDKyzu6NyAo5Ii1_DRzceSrYdeOz6lLkwKs00Y/https/cdn.discordapp.com/icons/855817825822179329/11e7988d1bf46a6f955f3f425e8c8ba0.png?format=webp&quality=lossless&width=200&height=200"
+        // `Subtask [1]\n  - Objective      : Explain how WebSocket establishes a connection.\n  - Expected Output: Detailed explanation of the WebSocket handshake process.`
     });
 
-    const msg = new HumanMessage({
-        content: [
-            {
-                type: "image_url",
-                image_url: {
-                    url: "https://media.discordapp.net/attachments/1105093381085995058/1396773544259752059/20250719_115303.jpg?ex=687f4e3b&is=687dfcbb&hm=eea6432cf14b4f77e14d9c95f228cb51bdb5f0b82e8a623563727cea86ee221a&=&format=webp&width=411&height=547"
-                }
-            }
-        ]
-    })
+    ComponentContainer.getNova().emit("taskCreate", task, session);
 
-    let res = await ChatPromptTemplate.fromMessages([
-        msg,
-        HumanMessagePromptTemplate.fromTemplate("輸入: \n{input}")
-    ]).pipe(await ComponentContainer.getLLMManager().create("test", {
-        model: "gpt-4o"
-    })).invoke({
-        input: "描述這張圖片。"
-    })
-
-    console.log(res)
-
-    // const results = await Vectra.getInstance().queryItems<GraphNodeMetadata>(vector, 5, {
-    //     // @ts-ignore
-    //     "namespace": { "$eq": NODES_PATH },
-    //     // @ts-ignore
-    //     "user_id": {
-    //         "$eq": user.id
-    //     },
-    //     "memory_type:"
-    // });
-    // console.log(results)
-
-    // results.map((r) => console.log(r.item));
+    // ComponentContainer.getNova().TaskOrchestrator.subAgent.handleTask(task);
 });

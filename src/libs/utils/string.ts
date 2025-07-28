@@ -31,3 +31,31 @@ export const getTime = () => {
 
 export const tw2s = OpenCC.Converter({ from: 'tw', to: 'cn' });
 export const s2tw = OpenCC.Converter({ from: 'cn', to: 'tw' });
+
+export const replaceCodeBlocksToTripleQuotes = (text: string) => {
+    return text.replace(/```[\s\S]*?```/g, (match: string) => {
+        const inner = match.replace(/^```[a-zA-Z]*\n?/, "").replace(/```$/, "");
+        return `"""${inner}"""`;
+    });
+}
+export const replaceTripleQuotesToCodeBlocks = (text: string) => {
+    return text.replace(/"""[\s\S]*?"""/g, (match: string) => {
+        const inner = match.replace(/^"""[a-zA-Z]*\n?/, "").replace(/"""$/, "");
+        return `\`\`\`${inner}\`\`\``;
+    });
+}
+export const restoreTripleQuotesInObject = (obj: any): any => {
+    if (typeof obj === 'string') {
+        return replaceTripleQuotesToCodeBlocks(obj);
+    } else if (Array.isArray(obj)) {
+        return obj.map(restoreTripleQuotesInObject);
+    } else if (obj !== null && typeof obj === 'object') {
+        const restored: Record<string, any> = {};
+        for (const key in obj) {
+            restored[key] = restoreTripleQuotesInObject(obj[key]);
+        }
+        return restored;
+    } else {
+        return obj;
+    }
+}
