@@ -4,10 +4,10 @@
 
 import { createInterface } from 'readline';
 
-import { AssistantResponse } from '../application/assistant/Assistant';
 import { MemoryReader } from '../application/memory/MemoryReader';
 import { GraphNodeMetadata, MemoryTree, NODES_PATH } from '../application/memory/tree/MemoryTree';
 import { Nova } from '../application/Nova';
+import { PersonaResponse } from '../application/persona/Persona';
 import { LATS } from '../application/task/lats/LATS';
 import { TaskResponse } from '../application/task/Task';
 import { Message } from '../application/user/UserIO';
@@ -70,7 +70,7 @@ ComponentContainer.initialize([
             images: [],
             user,
             timestamp: Date.now(),
-            reply: function (response: { assistant?: AssistantResponse; task?: TaskResponse; }): void {
+            reply: function (response: { assistant?: PersonaResponse; task?: TaskResponse; }): void {
                 throw new Error('Function not implemented.');
             }
         }

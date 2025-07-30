@@ -7,10 +7,10 @@ import { createInterface } from 'readline';
 import { HumanMessage } from '@langchain/core/messages';
 import { ChatPromptTemplate, HumanMessagePromptTemplate } from '@langchain/core/prompts';
 
-import { Assistant, AssistantResponse } from '../application/assistant/Assistant';
 import { MemoryReader } from '../application/memory/MemoryReader';
 import { GraphNodeMetadata, MemoryTree, NODES_PATH } from '../application/memory/tree/MemoryTree';
 import { Nova } from '../application/Nova';
+import { Persona, PersonaResponse } from '../application/persona/Persona';
 import { LATS } from '../application/task/lats/LATS';
 import { SubAgent } from '../application/task/SubAgent';
 import { Task, TaskResponse } from '../application/task/Task';

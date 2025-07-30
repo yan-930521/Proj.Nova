@@ -8,10 +8,10 @@ import {
 
 import { MessageContentComplex } from '@langchain/core/messages';
 
-import { AssistantResponse } from './application/assistant/Assistant';
 import { MemoryCube } from './application/memory/MemoryCube';
 import { MemoryReader } from './application/memory/MemoryReader';
 import { Nova } from './application/Nova';
+import { PersonaResponse } from './application/persona/Persona';
 import { Session } from './application/SessionContext';
 import { LATS } from './application/task/lats/LATS';
 import { TaskResponse } from './application/task/Task';
@@ -203,7 +203,7 @@ ComponentContainer.initialize([
                 let result = await cmdParser(msg, session, ct);
                 if (result) return;
 
-                const reply = async (response: { task?: TaskResponse, assistant?: AssistantResponse }) => {
+                const reply = async (response: { task?: TaskResponse, persona?: PersonaResponse }) => {
                     const costTime = Date.now() - msg.createdTimestamp;
 
                     if (response.task) {
@@ -224,11 +224,11 @@ ComponentContainer.initialize([
                         });
                     }
 
-                    if (response.assistant) {
+                    if (response.persona) {
                         const channel = getChannel(client, msg.channelId);
                         if (channel) channel.sendTyping();
 
-                        const fullText = `${response.assistant.response}${response.assistant.reasoning === "" ? "" : "\n\n`" + response.assistant.reasoning + "`"}`;
+                        const fullText = `${response.persona.response}${response.persona.reasoning === "" ? "" : "\n\n`" + response.persona.reasoning + "`"}`;
 
                         await msg.reply({
                             embeds: [

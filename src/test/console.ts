@@ -4,12 +4,12 @@
 
 import { createInterface } from 'readline';
 
-import { AssistantResponse } from '../application/assistant/Assistant';
 import { MemorySystemLogger } from '../application/memory/base/Memory';
 import { MemoryCube } from '../application/memory/MemoryCube';
 import { MemoryReader } from '../application/memory/MemoryReader';
 import { MemoryTree } from '../application/memory/tree/MemoryTree';
 import { Nova } from '../application/Nova';
+import { PersonaResponse } from '../application/persona/Persona';
 import { Session } from '../application/SessionContext';
 import { LATS } from '../application/task/lats/LATS';
 import { TaskResponse } from '../application/task/Task';
@@ -126,7 +126,7 @@ ComponentContainer.initialize([
                 type: 'user',
                 user,
                 timestamp: Date.now(),
-                async reply({ assistant, task }) {
+                async reply({ persona, task }) {
                     const memories = await ComponentContainer.getMemoryReader().extractFromMessages(session);
                     await cube.memoryTree?.add(memories);
                 }

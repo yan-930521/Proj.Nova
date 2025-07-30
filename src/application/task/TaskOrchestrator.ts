@@ -10,14 +10,17 @@ import {
 import { ChatOpenAI, ChatOpenAICallOptions } from '@langchain/openai';
 
 import { ComponentContainer } from '../../ComponentContainer';
+import { LevelDBTaskRepository } from '../../frameworks/levelDB/LevelDBTaskRepository';
 import { BaseAgent, BaseAgentCallOptions } from '../../libs/base/BaseAgent';
 import { BaseSuperVisor } from '../../libs/base/BaseSupervisor';
-import { AssistantResponse } from '../assistant/Assistant';
+import { JSONOutputToolsParser, Nova } from '../Nova';
+import { PersonaResponse } from '../persona/Persona';
 import {
     CLOSED_BOOK_PROMPT, CLOSED_BOOK_TYPE, GET_FINAL_ANSWER_PROMPT, PARALLEL_SAFE_DECOMPOSER_PROMPT,
     PARALLEL_SAFE_DECOMPOSER_TYPE, SYNTHESIZE_PROMPT, SYSTEM_MESSAGE
 } from '../prompts/task';
 import { getReplyfromSession, Session } from '../SessionContext';
+import { CreateTask } from '../tools/system';
 import { SubAgent } from './SubAgent';
 import { Task, TaskResponse } from './Task';
 
@@ -46,6 +49,49 @@ export class TaskOrchestrator extends BaseSuperVisor {
         });
 
         await this.subAgent.init();
+    }
+
+    async handleTask(input: string, session: Session) {
+        let reply = getReplyfromSession(session);
+
+        try {
+            this.logger.debug("Creating Task...");
+            const result = await this.llm.bindTools([CreateTask], { tool_choice: CreateTask.name })
+                .pipe(JSONOutputToolsParser)
+                .invoke(Nova.clearImage(Nova.getMessages(session)));
+
+            let task_str = result[0].args.task;
+            this.logger.debug(`[task]: ${task_str}`);
+
+            const task = new Task({
+                user: session.user,
+                userInput: input,
+                description: task_str
+            });
+
+            session.context.inputMessages.push({
+                content: `[task]: ${task_str}`,
+                images: [],
+                type: 'assistant',
+                user: session.user,
+                timestamp: Date.now(),
+                reply: () => { }
+            });
+
+            setTimeout(() => task.forceExit.abort(), 60000 * 6);
+            await LevelDBTaskRepository.getInstance().create(task);
+            ComponentContainer.getNova().emit("taskCreate", task, session);
+
+        } catch (err) {
+            this.logger.error(String(err));
+            if (reply) reply({
+                persona: {
+                    reasoning: "...",
+                    response: "Task 模組故障，請稍後嘗試...",
+                    wordsCount: 0
+                }
+            });
+        }
     }
 
     async processTask(task: Task, session: Session) {
@@ -148,7 +194,6 @@ export class TaskOrchestrator extends BaseSuperVisor {
     }
 
     async prepareFinalAnswer(task: Task, report: string) {
-
         const final_answer = await
             ChatPromptTemplate.fromMessages([
                 new SystemMessage(this.getFinalAnswerPrompt(task.description, report))
@@ -158,157 +203,6 @@ export class TaskOrchestrator extends BaseSuperVisor {
 
         return final_answer.content.toString();
     }
-
-    // async selectNextAgent(state: typeof TaskOrchestratorState.State) {
-    //     this.logger.debug("select next agent");
-    //     this.logger.debug("remain steps: " + state.task_plan.length);
-
-    //     let {
-    //         replan_counter,
-    //         stall_counter,
-    //         session
-    //     } = state;
-    //     // Orchestrate the next step
-    //     const ledger_data = await this.updateLedger(state);
-
-    //     // Task is complete
-    //     if (ledger_data.is_request_satisfied.answer) {
-    //         this.logger.debug("request satisfied");
-
-    //         if (state.final_report == "") {
-    //             // generate a final message to summarize the conversation
-    //             state.final_report = await this.prepareFinalAnswer(state);
-    //         }
-
-    //         state.task.final_report = state.final_report;
-
-    //         return END;
-    //     }
-    //     // console.log(state.messages.length)
-    //     // Stalled or stuck in a loop
-    //     if (ledger_data.is_in_loop.answer || !ledger_data.is_progress_being_made.answer) {
-    //         stall_counter++;
-    //         this.logger.debug("stall: " + stall_counter)
-    //         if (stall_counter > TaskOrchestrator.MAX_STALL_BEFORE_REPLAN) {
-    //             this.logger.debug("replan: " + replan_counter)
-    //             replan_counter++;
-    //             stall_counter = 0;
-    //             if (replan_counter > TaskOrchestrator.MAX_REPLAN) {
-    //                 replan_counter = 0;
-    //                 stall_counter = 0;
-    //                 this.logger.debug("Replan counter exceeded... Terminating.");
-    //                 return END;
-    //             } else {
-    //                 //  Let's create a new plan
-    //                 return "UpdateFactAndPlan";
-    //             }
-    //         }
-    //     }
-
-    //     // If we goit this far, we were not starting, done, or stuck
-
-
-    //     let next_agent = state.task_plan.shift(); // get the first plan step
-    //     if (!next_agent) return "UpdateFactAndPlan";
-
-    //     // find the agent with plan
-    //     for (let name in this.members) {
-    //         if (name.toLowerCase() == next_agent[0].toLowerCase()) {
-    //             let instruction = next_agent[1];
-    //             return new Send(name, { ...state, instruction });
-    //         }
-    //     }
-
-    //     return END;
-    // }
-
-    // async handleTaskCreate(session: Session, task: Task) {
-    //     const threadConfig = {
-    //         configurable: {
-    //             thread_id: task.id, // 使用任務id
-    //         }
-    //     };
-
-    //     let reply = getReplyfromSession(session);
-
-    //     if (this.graph.checkpointer) {
-    //         let thread = await this.graph.checkpointer.get(threadConfig);
-    //         if (this.runingTasks[task.id] && thread) {
-    //             this.logger.debug("update thread for task: " + task.id);
-    //             await this.graph.updateState({
-    //                 ...threadConfig,
-    //                 signal: task.forceExit.signal
-    //             }, {
-    //                 messages: [new HumanMessage(task.userInput)],
-    //                 task_description: task.description,
-    //                 session,
-    //                 task
-    //             });
-    //         } else {
-    //             this.runingTasks[task.id] = true;
-    //             this.logger.debug("create thread for task: " + task.id);
-    //             const stream = await this.graph.stream(
-    //                 {
-    //                     messages: [new HumanMessage(task.userInput)],
-    //                     task_description: task.description,
-    //                     session,
-    //                     task
-    //                 } as Partial<typeof TaskOrchestratorState.State>,
-    //                 {
-    //                     ...threadConfig,
-    //                     signal: task.forceExit.signal
-    //                 }
-    //             );
-
-    //             let lastStep;
-    //             for await (const step of stream) {
-    //                 lastStep = step;
-    //                 const [stepName, stepState] = Object.entries(step)[0];
-
-    //                 if (Object.keys(this.members).includes(stepName) && (stepState as typeof TaskOrchestratorState.State).messages) {
-    //                     let instruction = (stepState as typeof TaskOrchestratorState.State).messages.shift()?.content ?? "";
-    //                     let msg = (stepState as typeof TaskOrchestratorState.State).messages.map((m) => m.content).join("\n");
-
-    //                     if (reply) reply({
-    //                         task: {
-    //                             sender: stepName,
-    //                             instruction: instruction as string,
-    //                             message: msg
-    //                         }
-    //                     });
-    //                 }
-
-    //                 // console.log(stepName, stepState);
-    //                 // // @ts-ignore
-    //                 // console.log("rolled out: ", stepState?.root?.height);
-    //                 // if(stepState?.messages) {
-
-    //                 // }
-    //                 this.logger.debug("---");
-    //             }
-
-    //             session.context.recentMessages.push({
-    //                 content: task.final_report,
-    //                 type: 'assistant',
-    //                 images: [],
-    //                 user: session.user,
-    //                 timestamp: Date.now(),
-    //                 reply: function (response: { assistant?: AssistantResponse; task?: TaskResponse; }): void {
-    //                     throw new Error('Function not implemented.');
-    //                 }
-    //             })
-
-    //             if (reply) reply({
-    //                 task: {
-    //                     sender: 'Final Report',
-    //                     instruction: "",
-    //                     message: task.final_report
-    //                 }
-    //             })
-    //         }
-    //     }
-    // }
-
 
     private static formatFacts(facts: z.infer<typeof CLOSED_BOOK_TYPE>) {
         return Object.keys(facts).map((member) => {

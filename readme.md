@@ -28,7 +28,7 @@ Nova 是一套高度模組化、可擴展的 AI 系統架構，設計目標為�
 結合人格模擬、長期記憶與動態任務分解機制，使 AI 具備以下能力：
 
 ### 1. 人格模擬模組
-為 AI 代理注入具體的人格特質，使其行為風格具備一致性，並直接影響決策與互動模式。<br>
+為 AI 代理注入具體的人格特質，使其行為風格具備一致性，並間接影響決策與互動模式。<br>
 舉例來說，外向型代理傾向主動探索與交流，而內向型代理則偏好深度分析與謹慎回應。
 
 ### 2. 記憶模組
@@ -57,22 +57,25 @@ Nova 是一套高度模組化、可擴展的 AI 系統架構，設計目標為�
 Nova（控制中樞）
 ├── EventMediator（模組間事件流動中樞）
 ├── SessionContext (對話、上下文管理)
+├── UserIO (對話入口)
+├── Persona（人格模組）
+│   ├── handleChat() 對話處理入口
+│   └── Routing
+│       ├── Chat
+│       ├── Reasoning
+│       ├── Retrieval
+│       └── Diary
+├── TaskOrchestrator（任務調度器）
+│   ├── handleTask() 任務建立與儲存
+│   ├── processTask() 任務主流程執行器
+│   │   ├── decomposeTask() 任務拆解
+│   │   ├── subAgent.processTasks() 子任務處理器
+│   │   └── prepareFinalAnswer() 整理最終報告
+│   ├── SubAgent 任務子代理執行單位
+│   ├── TaskTemplate 任務模板
+│   └── SkillLibrary  可插拔技能模組（由 SubAgent 使用）
 │
-├── Assistant（唯一對話入口）
-│   └── PersonaEngine（人格/語調模組）
-│   └── SessionContext（上下文管理）
-│   └── ExpressionPlanner（語言風格控制）
-│
-├── TaskOrchestrator（任務規劃與代理生成）
-│   └── Planner（任務拆解與流程規劃）
-│   └── SkillLibrary（技能模組集，可插拔）
-│   └── ToolExecutor（工具調用器）
-│
-├── MemorySystem（智能記憶代理）
-│   └── SemanticMemory（知識網絡）
-│   └── EpisodicMemory（事件與互動記錄）
-│   └── ProceduralMemory（操作與技能經驗）
-│   └── Profile（使用者偏好與習慣）
+├── MemorySystem（記憶系統）
 │
 ├── DeviceController（虛實設備介接）
 └── BehaviorValidator（輸出風險與倫理審查）
@@ -141,3 +144,5 @@ Nova（控制中樞）
     改成sub task agent，然後存取所有工具或許比較好
   - 大幅改善assistant token用量<br>
     <image src="./asset/token.png" height="200">
+* 2025/07/30
+  - 重新規劃assistant邏輯、重命名assistant為persona

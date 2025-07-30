@@ -55,23 +55,23 @@ export class MemoryCube extends BaseComponent {
         await this.saveCube();
     }
 
-    async search(query: string, topk: number = 3, session: Session) {
-        if (ComponentContainer.getConfig().isMultipleChat) return (await this.memoryTree?.search(query, topk, null)) ?? [];
+    async search(query: string, topk: number = 3, session?: Session) {
+        if (ComponentContainer.getConfig().isMultipleChat || !session) return (await this.memoryTree?.search(query, topk, null)) ?? [];
         return (await this.memoryTree?.search(query, topk, session)) ?? [];
     }
 
-    getMemory(session: Session) {
-        if (ComponentContainer.getConfig().isMultipleChat) return this.memoryTree?.nodeManager.toString(null, null, true, 5);
+    getMemory(session?: Session) {
+        if (ComponentContainer.getConfig().isMultipleChat || !session) return this.memoryTree?.nodeManager.toString(null, null, true, 5);
         return this.memoryTree?.nodeManager.toString(null, session, true, 5);
     }
 
-    getWorkingMemory(session: Session) {
-        if (ComponentContainer.getConfig().isMultipleChat) return this.memoryTree.getWorkingMemory(null);
+    getWorkingMemory(session?: Session) {
+        if (ComponentContainer.getConfig().isMultipleChat || !session) return this.memoryTree.getWorkingMemory(null);
         return this.memoryTree.getWorkingMemory(session);
     }
 
-    toString(nodes: MemoryNode[] | null, session: Session, topK?: number) {
-        if (ComponentContainer.getConfig().isMultipleChat) {
+    toString(nodes: MemoryNode[] | null, session?: Session, topK?: number) {
+        if (ComponentContainer.getConfig().isMultipleChat || !session) {
             let result = this.memoryTree?.nodeManager.toString(nodes, null, false, topK);
             MemorySystemLogger.debug("Memory Tree:\n" + result);
             return result;
@@ -82,8 +82,8 @@ export class MemoryCube extends BaseComponent {
         }
     }
 
-    toDetailString(nodes: MemoryNode[] | null, session: Session, topK?: number) {
-        if (ComponentContainer.getConfig().isMultipleChat) {
+    toDetailString(nodes: MemoryNode[] | null, session?: Session, topK?: number) {
+        if (ComponentContainer.getConfig().isMultipleChat || !session) {
             let result = this.memoryTree?.nodeManager.toString(nodes, null, true, topK);
             MemorySystemLogger.debug("Memory Tree:\n" + result);
             return result;

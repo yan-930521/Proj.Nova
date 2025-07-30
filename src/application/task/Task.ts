@@ -2,7 +2,7 @@ import { ComponentContainer } from '../../ComponentContainer';
 import { User } from '../../domain/entities/User';
 import { TypedEvent } from '../../libs/events/Events';
 import { getUid } from '../../libs/utils/string';
-import { AssistantResponse } from '../assistant/Assistant';
+import { PersonaResponse } from '../persona/Persona';
 
 export enum TaskType {
     CasualChat = "CasualChat",

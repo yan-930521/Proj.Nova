@@ -3,7 +3,7 @@ import { MessageContent } from '@langchain/core/messages';
 import { ComponentContainer } from '../../ComponentContainer';
 import { User } from '../../domain/entities/User';
 import { BaseComponent } from '../../libs/base/BaseComponent';
-import { AssistantResponse } from '../assistant/Assistant';
+import { PersonaResponse } from '../persona/Persona';
 import { Session } from '../SessionContext';
 import { TaskResponse } from '../task/Task';
 
@@ -16,7 +16,7 @@ export interface Message {
     user: User,
     timestamp: number
     reply: (response: {
-        assistant?: AssistantResponse
+        persona?: PersonaResponse
         task?: TaskResponse
     }) => void
 }
@@ -45,7 +45,7 @@ export class UserIO extends BaseComponent {
         const session = await ComponentContainer.getNova().SessionContext.ensureSession(userId);
 
         const dispatch = () => {
-            // 延遲3秒發送蒐集到的訊息陣列給Assistant
+            // 延遲2秒發送蒐集到的訊息陣列給Assistant
             return setTimeout(async () => {
                 // 避免歷史衝突
                 if (session.isReplying) {
@@ -56,7 +56,7 @@ export class UserIO extends BaseComponent {
                 session.context.inputMessages.push(...this.msgList[userId].msgs);
                 this.msgList[userId].msgs = [];
                 ComponentContainer.getNova().emit("messageDispatch", session);
-            }, 3000);
+            }, 2000);
         }
 
         if (!this.msgList[userId]) {
