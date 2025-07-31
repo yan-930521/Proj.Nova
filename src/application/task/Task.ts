@@ -1,47 +1,19 @@
-import { ComponentContainer } from '../../ComponentContainer';
+import { z } from 'zod';
+
 import { User } from '../../domain/entities/User';
-import { TypedEvent } from '../../libs/events/Events';
 import { getUid } from '../../libs/utils/string';
-import { PersonaResponse } from '../persona/Persona';
+import { MonitorConfigSchema, SubtaskSchema } from '../tools/system';
 
 export enum TaskType {
     CasualChat = "CasualChat",
-    TaskOriented = "TaskOriented",
-    // TaskPlanning = "TaskPlanning",
-    // KnowledgeQuestion = "KnowledgeQuestion",
-    // Reminder = "Reminder",
-    // CalendarManagement = "CalendarManagement",
-    // EmailHandling = "EmailHandling",
-    // WeatherQuery = "WeatherQuery",
-    // NewsFetch = "NewsFetch",
-    // Translation = "Translation",
-    // MathCalculation = "MathCalculation",
-    // CodeGeneration = "CodeGeneration",
-    // WebSearch = "WebSearch",
-    // DeviceControl = "DeviceControl",
-    // FileManagement = "FileManagement",
-    // NoteTaking = "NoteTaking",
-    // TravelBooking = "TravelBooking"
+    Shortterm = "Shortterm",
+    Longterm = "Longterm"
 }
 
 export const TaskDescription: Record<TaskType, string> = {
     [TaskType.CasualChat]: "Engage in open-ended conversations or interactions without a specific task.",
-    [TaskType.TaskOriented]: "Handle specific goal-directed tasks such as planning, report generation, or calculations."
-    // [TaskType.TaskPlanning]: "Help plan, schedule, or coordinate a task or goal. Please avoid using this if possible, as it is very resource-intensive.",
-    // [TaskType.KnowledgeQuestion]: "Answer factual or conceptual questions, including multi-step reasoning and complex problem-solving.",
-    // [TaskType.Reminder]: "Set, update, or cancel reminders for the user.",
-    // [TaskType.CalendarManagement]: "Manage calendar events, including creation, updates, and deletions.",
-    // [TaskType.EmailHandling]: "Read, compose, or organize emails on behalf of the user.",
-    // [TaskType.WeatherQuery]: "Provide current weather information or forecasts.",
-    // [TaskType.NewsFetch]: "Fetch and summarize the latest news based on user interests.",
-    // [TaskType.Translation]: "Translate text between different languages.",
-    // [TaskType.MathCalculation]: "Perform mathematical calculations or solve equations.",
-    // [TaskType.CodeGeneration]: "Generate code snippets or assist with programming tasks.",
-    // [TaskType.WebSearch]: "Search the web for information and summarize results.",
-    // [TaskType.DeviceControl]: "Control smart devices (e.g., lights, thermostat) as requested.",
-    // [TaskType.FileManagement]: "Manage files, including upload, download, and organization.",
-    // [TaskType.NoteTaking]: "Take, organize, or retrieve notes for the user.",
-    // [TaskType.TravelBooking]: "Help book travel arrangements such as flights, hotels, or transportation."
+    [TaskType.Shortterm]: "Handle short-term, goal-directed tasks such as planning, reporting, or simple calculations.",
+    [TaskType.Longterm]: "Manage ongoing, multi-step processes that require monitoring, scheduling, and adaptive decision-making over time."
 };
 
 export enum TaskStatus {
@@ -75,8 +47,10 @@ export type TaskResponse = {
     message: string;
 }
 
-export class Task {
+export type MonitorConfig = z.infer<typeof MonitorConfigSchema>;
+export type Subtask = z.infer<typeof SubtaskSchema>;
 
+export class Task {
     public id: string = Task.createId();
 
     public user: User;
@@ -97,6 +71,8 @@ export class Task {
 
     public parent?: Task;
 
+
+
     constructor(
         taskData: { user: User } & Partial<Task>
     ) {
@@ -116,7 +92,7 @@ export class Task {
      * @returns 
      */
     static createId(baseId: string = getUid()) {
-        return "TASK-" + baseId;
+        return "SHORT_TERM_TASK-" + baseId;
     }
 
     updateRecord(record: RecordItem) {
@@ -166,5 +142,26 @@ export class Task {
         const startedAt = new Date(last.at).getTime();
         const now = Date.now();
         return (now - startedAt) > timeoutMs;
+    }
+}
+
+export class LongtermTask extends Task {
+    public name: string = "unknown name";
+    public monitor_config: z.infer<typeof MonitorConfigSchema> = { resources: [] };
+    public subtasks: z.infer<typeof SubtaskSchema>[] = [];
+
+    public variables = new Map<string, string>();
+
+    constructor(taskData: { user: User } & Partial<LongtermTask>) {
+        super({ ...taskData, type: TaskType.Longterm });
+        Object.assign(this, taskData);
+    }
+
+    static override createId(baseId: string = getUid()) {
+        return `LONG_TERM_TASK-${baseId}`;
+    }
+
+    getSubtaskByName(name: string): Subtask | undefined {
+        return this.subtasks.find(t => t.name === name);
     }
 }

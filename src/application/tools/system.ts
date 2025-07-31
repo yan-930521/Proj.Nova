@@ -2,13 +2,16 @@ import { z } from 'zod';
 
 import { DynamicStructuredTool } from '@langchain/core/tools';
 
+import { SUBAGENT_REFLECT_TYPE } from '../prompts/task';
+import { TaskDescription, TaskType } from '../task/Task';
+
 export const RouterTool = new DynamicStructuredTool({
     name: "router_tool",
-    description: "根據使用者輸入，決定是否需要一般對話、資訊檢索、深度推理。",
+    description: "根據使用者輸入，決定需要一般對話、資訊檢索或深度推理。",
     schema: z.object({
         next: z.enum([
             "general_chat",
-            "retrieve_memory",
+            "retrieve_information",
             "deep_think"
         ])
     }),
@@ -56,9 +59,9 @@ export const ResponseOutputTool = new DynamicStructuredTool({
     }
 });
 
-export const CreateTask = new DynamicStructuredTool({
-    name: "create_task",
-    description: "創建新任務",
+export const CreateShorttermTask = new DynamicStructuredTool({
+    name: "create_shortterm_Task",
+    description: "創建短期任務",
     schema: z.object({
         task: z.string()
             .describe("任務的詳細描述、需求、目標。")
@@ -69,14 +72,81 @@ export const CreateTask = new DynamicStructuredTool({
     }
 });
 
+export const MonitorConfigSchema = z.object({
+    resources: z.array(
+        z.object({
+            name: z.string().describe("要監控的資源名稱，為一個變數，例如 \"value\", \"temperature\""),
+            check_interval: z.string().describe("檢查資源狀態的時間間隔，例如 '10m', '1h'，單位預設為分鐘"),
+            threshold: z.number().optional().describe("單一數值閾值，用於觸發條件"),
+            on_below_threshold: z.string().optional().describe("當資源低於 threshold 時觸發的子任務名稱"),
+            on_above_threshold: z.string().optional().describe("當資源超過 threshold 時觸發的子任務名稱"),
+            min: z.number().optional().describe("資源允許的最小值"),
+            max: z.number().optional().describe("資源允許的最大值"),
+            on_violation: z.string().optional().describe("當資源超出 min/max 區間時觸發的子任務名稱")
+        })
+    ).describe("定義所有需監控的資源項目"),
+});
+
+const iifePattern = /^\(\s*\(\s*.*\s*\)\s*=>\s*\{[\s\S]*\}\s*\)\s*\(\s*\)\s*;?$/;
+
+export const SubtaskSchema = z.object({
+    name: z.string().describe("子任務的名稱"),
+    description: z.string().describe("對子任務功能、目標的詳細說明"),
+    type: z.enum(["callagent", "jscode"])
+        .describe("子任務類型，callagent 表示呼叫代理，jscode 表示執行 js_code"),
+    schedule: z.object({
+        type: z.enum(["cron", "interval", "threshold-triggered"])
+            .describe("排程類型，例如週期性或由資源觸發"),
+        trigger: z.string().describe("具體的排程條件，例如 cron 表達式、資源變數名稱")
+    }),
+    js_code: z.string()
+        .optional()
+        .describe("執行該子任務所需的 JavaScript 程式碼，最外層必須是(() => { ... })()，type 為 jscode 時必須填寫")
+        .refine(val => val == undefined || iifePattern.test(val.trim()), {
+            message: "js_code 必須是立即執行箭頭函式 (IIFE)，例如 (() => { ... })()"
+        }),
+    resource: z.string().optional().describe("此子任務提供的變數名稱（如 'temperature'），若該子任務會回傳資源值，則應提供此欄位")
+}).describe("該子任務的排程設定").refine(data => {
+    if (data.type === "jscode") return typeof data.js_code === "string" && data.js_code.length > 0;
+    return true;
+}, {
+    message: "當 type 為 jscode 時，js_code 欄位必須存在且符合格式"
+});
+
+export const LongTermTaskLLMOutputSchema = z.object({
+    name: z.string().describe("長期任務的名稱"),
+    monitor_config: MonitorConfigSchema.describe("包含所有資源與狀態的監控設定"),
+    subtasks: z.array(SubtaskSchema).describe("所有可執行的子任務清單")
+});
+
+export const CreateLongtermTask = new DynamicStructuredTool({
+    name: "create_longterm_Task",
+    description: "創建長期任務",
+    schema: LongTermTaskLLMOutputSchema,
+    func: async (input) => {
+        const data = JSON.stringify(input, null, 4);
+        return data;
+    }
+});
+
 
 export const FastClassify = new DynamicStructuredTool({
     name: "fast_classify",
-    description: `快速分類輸入訊息，判斷用戶意圖類別，分類說明如下: \n- chitchat: 日常閒聊與情感互動，如打招呼、閒談等。\n- command: 明確系統指令，需直接執行單步驟操作，如開啟應用、關閉程序。\n- task: 複合任務，需拆解多步驟或多模組協作，如整理會議紀錄並發送郵件。\n- reflection: 自我反思相關詢問或報告生成，如要求評估今日表現。\n- uncertain: 無法判定意圖，需進一步語意分析。`,
+    description: `快速分類輸入訊息，判斷用戶意圖類別，分類說明如下: \n${Object.entries(TaskDescription).map(([name, description]) => ` - ${name}: ${description}`)}`,
     schema: z.object({
-        intent: z.enum(["chitchat", "command", "task", "reflection", "uncertain"])
+        intent: z.enum(Object.keys(TaskType) as [keyof typeof TaskType])
             .describe("使用者輸入的意圖分類")
     }),
+    func: async (input) => {
+        const data = JSON.stringify(input, null, 4);
+        return data;
+    }
+});
+
+export const ReflectTool = new DynamicStructuredTool({
+    name: "reflect_tool",
+    description: "reflect the subtasks",
+    schema: SUBAGENT_REFLECT_TYPE,
     func: async (input) => {
         const data = JSON.stringify(input, null, 4);
         return data;

@@ -21,7 +21,7 @@ import { BASE_CHARACTER_PROMPT, ExtendDiary } from '../prompts/character';
 import { getReplyfromSession, Session } from '../SessionContext';
 import { Task } from '../task/Task';
 import {
-    CreateTask, ReasoningOutputTool, ResponseOutputTool, RetrieveTool, RouterTool
+    CreateShorttermTask, ReasoningOutputTool, ResponseOutputTool, RetrieveTool, RouterTool
 } from '../tools/system';
 
 export interface PersonaResponse {
@@ -183,7 +183,7 @@ export class Persona extends BaseSuperVisor {
         switch (result[0].args.next) {
             case "deep_think":
                 return Persona.REASONING_MODE;
-            case "retrieve_memory":
+            case "retrieve_information":
                 return Persona.RETRIEVE_MODE;
             default:
                 return Persona.GENERAL_MODE;
@@ -399,7 +399,7 @@ export class Persona extends BaseSuperVisor {
 
     async handleChat(input: string, hasImage: boolean, character: CharacterObj, session: Session) {
         let reply = getReplyfromSession(session);
-        
+
         try {
             const threadConfig = {
                 configurable: { thread_id: session.id }

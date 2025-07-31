@@ -11,7 +11,7 @@ import { BaseSuperVisor, BaseSuperVisorCallOptions } from '../libs/base/BaseSupe
 import { replaceCodeBlocksToTripleQuotes, restoreTripleQuotesInObject } from '../libs/utils/string';
 import { Persona, PersonaResponse } from './persona/Persona';
 import { getReplyfromSession, Session, SessionContext } from './SessionContext';
-import { Task, TaskType } from './task/Task';
+import { LongtermTask, Task, TaskType } from './task/Task';
 import { TaskOrchestrator } from './task/TaskOrchestrator';
 import { FastClassify as FastClassifyTool } from './tools/system';
 import { Message, UserIO } from './user/UserIO';
@@ -25,7 +25,8 @@ export const JSONOutputToolsParser = new JsonOutputToolsParser<{
 export interface NovaEvents {
     "messageCreate": [Message],
     "messageDispatch": [Session],
-    "taskCreate": [Task, Session]
+    "taskCreate": [Task, Session],
+    "longtermTaskCreate": [LongtermTask, Session]
 }
 
 export class Nova extends BaseSuperVisor<NovaEvents> {
@@ -52,7 +53,10 @@ export class Nova extends BaseSuperVisor<NovaEvents> {
 
         this.on("messageCreate", this.UserIO.handleMessageCreate.bind(this.UserIO));
         this.on("messageDispatch", this.handleMessageDispatch.bind(this.Persona));
-        this.on("taskCreate", this.TaskOrchestrator.processTask.bind(this.TaskOrchestrator));
+        this.on("taskCreate", this.TaskOrchestrator.processShorttermTask.bind(this.TaskOrchestrator));
+        this.on("longtermTaskCreate", (task: LongtermTask) => {
+            console.log(task)
+        });
 
         this.FastClassifier = ComponentContainer.getLLMManager().getLLM().bindTools([FastClassifyTool], { tool_choice: FastClassifyTool.name }).pipe(JSONOutputToolsParser)
 
@@ -173,17 +177,23 @@ export class Nova extends BaseSuperVisor<NovaEvents> {
             //  輕量級前置判斷器（Fast Classifier）
 
             const result = await this.FastClassifier.invoke([new HumanMessage(input)]);
-            const intent = result[0].args.intent as ("chitchat" | "command" | "task" | "reflection" | "uncertain");
+            const intent = result[0].args.intent as keyof typeof TaskType;
 
             const defatultCharacter = await Character.getDefaultCharacter();
 
             switch (intent) {
-                case "task":
+                case "Shortterm":
                     // 傳給任務導向調度器處理複合任務
-                    await this.TaskOrchestrator.handleTask(input, session);
-                case "chitchat": default:
+                    await this.TaskOrchestrator.handleShorttermTask(input, session);
+                    break;
+                case "Longterm":
+                    // 傳給任務導向調度器處理複合任務
+                    await this.TaskOrchestrator.handleLongtermTask(input, session);
+                    break;
+                case "CasualChat": default:
                     // 直接交給 Persona 層處理閒聊對話
                     await this.Persona.handleChat(input, imagesFlag, defatultCharacter, session);
+                    break;
             }
 
 

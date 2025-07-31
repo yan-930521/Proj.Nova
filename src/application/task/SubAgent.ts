@@ -23,6 +23,7 @@ import { Persona } from '../persona/Persona';
 import { SUBAGENT_PROMPT, SUBAGENT_REFLECT_PROMPT, SUBAGENT_REFLECT_TYPE } from '../prompts/task';
 import { webFetchTool } from '../tools/downloadFile';
 import { readDirTool, readFileTool, writeFileTool } from '../tools/file';
+import { ReflectTool } from '../tools/system';
 import { Task } from './Task';
 
 export const SubAgentState = Annotation.Root({
@@ -51,16 +52,6 @@ export const SubAgentState = Annotation.Root({
         reducer: (_, action) => action,
         default: () => null,
     }),
-});
-
-export const ReflectTool = new DynamicStructuredTool({
-    name: "reflect_tool",
-    description: "reflect the subtasks",
-    schema: SUBAGENT_REFLECT_TYPE,
-    func: async (input) => {
-        const data = JSON.stringify(input, null, 4);
-        return data;
-    }
 });
 
 export class SubAgent extends BaseSuperVisor {
@@ -276,6 +267,5 @@ export class SubAgent extends BaseSuperVisor {
         // then assign to taskorchestrator or gen response
 
         return workflow;
-
     }
 }

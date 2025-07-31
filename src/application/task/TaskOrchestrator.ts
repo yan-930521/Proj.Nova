@@ -1,3 +1,4 @@
+import ivm from 'isolated-vm';
 import { z } from 'zod';
 
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
@@ -20,9 +21,12 @@ import {
     PARALLEL_SAFE_DECOMPOSER_TYPE, SYNTHESIZE_PROMPT, SYSTEM_MESSAGE
 } from '../prompts/task';
 import { getReplyfromSession, Session } from '../SessionContext';
-import { CreateTask } from '../tools/system';
+import {
+    CreateLongtermTask, CreateShorttermTask, LongTermTaskLLMOutputSchema
+} from '../tools/system';
+import { LongtermTaskManager } from './LongtermTaskManager';
 import { SubAgent } from './SubAgent';
-import { Task, TaskResponse } from './Task';
+import { LongtermTask, Task, TaskResponse } from './Task';
 
 /**
  * 基於lats理論的任務規劃
@@ -33,7 +37,9 @@ export class TaskOrchestrator extends BaseSuperVisor {
 
     public subAgent = new SubAgent();
 
-    runingTasks: Record<string, boolean> = {}
+    public runingTasks: Record<string, boolean> = {};
+
+    longtermTaskManager = new LongtermTaskManager();
 
     constructor(options: BaseAgentCallOptions = {}) {
         super({
@@ -48,15 +54,17 @@ export class TaskOrchestrator extends BaseSuperVisor {
             maxTokens: 8192
         });
 
+        await this.longtermTaskManager.init();
+
         await this.subAgent.init();
     }
 
-    async handleTask(input: string, session: Session) {
+    async handleShorttermTask(input: string, session: Session) {
         let reply = getReplyfromSession(session);
 
         try {
-            this.logger.debug("Creating Task...");
-            const result = await this.llm.bindTools([CreateTask], { tool_choice: CreateTask.name })
+            this.logger.debug("Creating Short-term Task...");
+            const result = await this.llm.bindTools([CreateShorttermTask], { tool_choice: CreateShorttermTask.name })
                 .pipe(JSONOutputToolsParser)
                 .invoke(Nova.clearImage(Nova.getMessages(session)));
 
@@ -94,9 +102,51 @@ export class TaskOrchestrator extends BaseSuperVisor {
         }
     }
 
-    async processTask(task: Task, session: Session) {
+    async handleLongtermTask(input: string, session: Session) {
         let reply = getReplyfromSession(session);
-        this.logger.debug("\nProcess Task: " + task.description);
+        try {
+            this.logger.debug("Creating Long-term Task...");
+            const result = await this.llm.bindTools([CreateLongtermTask], { tool_choice: CreateLongtermTask.name })
+                .pipe(JSONOutputToolsParser)
+                .invoke(Nova.clearImage(Nova.getMessages(session)));
+
+            let longtermTask = result[0].args as unknown as z.infer<typeof LongTermTaskLLMOutputSchema>;
+            this.logger.debug(`[task]: ${longtermTask.name}`);
+
+            const task = new LongtermTask({
+                user: session.user,
+                userInput: input,
+                ...longtermTask
+            });
+
+            session.context.inputMessages.push({
+                content: `[long-term task]: ${task.name}`,
+                images: [],
+                type: 'assistant',
+                user: session.user,
+                timestamp: Date.now(),
+                reply: () => { }
+            });
+
+            // setTimeout(() => task.forceExit.abort(), 60000 * 6);
+            await LevelDBTaskRepository.getInstance().create(task);
+            ComponentContainer.getNova().emit("longtermTaskCreate", task, session);
+
+        } catch (err) {
+            this.logger.error(String(err));
+            if (reply) reply({
+                persona: {
+                    reasoning: "...",
+                    response: "Task 模組故障，請稍後嘗試...",
+                    wordsCount: 0
+                }
+            });
+        }
+    }
+
+    async processShorttermTask(task: Task, session: Session) {
+        let reply = getReplyfromSession(session);
+        this.logger.debug("\nProcess Short-term Task: " + task.description);
         const subTasks = await this.decomposeTask(task, session);
 
         let previousReport = `Request:\n${task.description}\n\n`;
@@ -122,6 +172,12 @@ export class TaskOrchestrator extends BaseSuperVisor {
         }
 
         task.final_report = await this.prepareFinalAnswer(task, previousReport);
+    }
+
+    async processLongtermTask(task: LongtermTask, session: Session) {
+        let reply = getReplyfromSession(session);
+        this.logger.debug("\nProcess Long-term Task: " + task.name);
+        console.log(task);
     }
 
     async decomposeTask(task: Task, session: Session) {
@@ -219,16 +275,11 @@ export class TaskOrchestrator extends BaseSuperVisor {
         return PARALLEL_SAFE_DECOMPOSER_PROMPT;
     }
 
-    private getSynthesizePrompt(task: string, facts: string, plan: string): string {
-        return SYNTHESIZE_PROMPT
-            .replace("{task}", task)
-            .replace("{facts}", facts)
-            .replace("{plan}", plan);
-    }
-
     private getFinalAnswerPrompt(task: string, report: string): string {
         return GET_FINAL_ANSWER_PROMPT
             .replace("{task}", task)
             .replace("{report}", report);
     }
+
+
 }
